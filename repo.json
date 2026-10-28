@@ -1,0 +1,22 @@
+[
+  {
+    "Author": "DocherPap",
+    "Name": "MakoMaster",
+    "InternalName": "MakoMaster",
+    "AssemblyVersion": "0.10.1.0",
+    "Description": "魔光键影自动输入与有限次数循环游玩。绿色护盾优先、按当前读条类型排序、整词及逐字候选匹配；危险技能预计结束前后各半秒暂停。文件保存默认关闭，可在高级设置中开启。",
+    "Punchline": "魔光键影自动输入与循环游玩",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LastUpdate": 1793185867,
+    "IsHide": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.1.0.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.1.0.zip",
+    "RepoUrl": "https://github.com/DocherPap/MakoMaster",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.1.0.zip",
+    "IsTestingExclusive": false
+  }
+]

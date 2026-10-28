@@ -164,9 +164,12 @@ public sealed partial class Plugin
         foreach (var row in casting.Nodes.Where(n => n.Visible && n.NodeId == 3 && n.Text == "打断成功！"))
         {
             if (!lastCasts.TryGetValue(WordMatching.Slot(row.Path), out var previous) || now - previous.At > 3000 || !interruptibleSkills.Add(previous.Skill)) continue;
-            var temporary = InterruptibleFile + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(interruptibleSkills.Order().ToArray()));
-            File.Move(temporary, InterruptibleFile, true);
+            if (saveLogs)
+            {
+                var temporary = InterruptibleFile + ".tmp";
+                File.WriteAllText(temporary, JsonSerializer.Serialize(interruptibleSkills.Order().ToArray()));
+                File.Move(temporary, InterruptibleFile, true);
+            }
             WriteRecord(new { Kind = "InterruptibleSkillConfirmed", At = DateTimeOffset.Now, previous.Skill });
         }
     }

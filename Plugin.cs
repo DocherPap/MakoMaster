@@ -41,6 +41,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private string timingMessage = "";
     private readonly WordResolver wordResolver = new();
     private readonly Queue<object> captureBacklog = new();
+    private bool saveLogs;
     private string TimingFile => Path.Combine(pi.AssemblyLocation.DirectoryName!, "timing-settings.json");
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
@@ -90,27 +91,31 @@ public sealed partial class Plugin : IDalamudPlugin
             if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前后各 0.5 秒暂停");
             if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
             ImGui.Separator();
-            ImGui.BeginDisabled(trial != null);
             if (ImGui.CollapsingHeader("高级设置"))
             {
-            ImGui.TextUnformatted("按键随机间隔（毫秒）");
-            ImGui.SetNextItemWidth(125);
-            ImGui.InputInt("##keyMin", ref keyMinMs, 0, 0);
-            ImGui.SameLine();
-            ImGui.TextUnformatted("～"); ImGui.SameLine();
-            ImGui.SetNextItemWidth(125);
-            ImGui.InputInt("##keyMax", ref keyMaxMs, 0, 0);
-            ImGui.TextUnformatted("每题随机停顿（毫秒）");
-            ImGui.SetNextItemWidth(125);
-            ImGui.InputInt("##wordMin", ref wordMinMs, 0, 0);
-            ImGui.SameLine();
-            ImGui.TextUnformatted("～"); ImGui.SameLine();
-            ImGui.SetNextItemWidth(125);
-            ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
-            if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
-            if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
-            if (ImGui.Button("恢复默认间隔")) { keyMinMs = 30; keyMaxMs = 80; wordMinMs = 500; wordMaxMs = 1200; }
+                ImGui.BeginDisabled(trial != null);
+                ImGui.TextUnformatted("按键随机间隔（毫秒）");
+                ImGui.SetNextItemWidth(125);
+                ImGui.InputInt("##keyMin", ref keyMinMs, 0, 0);
+                ImGui.SameLine();
+                ImGui.TextUnformatted("～"); ImGui.SameLine();
+                ImGui.SetNextItemWidth(125);
+                ImGui.InputInt("##keyMax", ref keyMaxMs, 0, 0);
+                ImGui.TextUnformatted("每题随机停顿（毫秒）");
+                ImGui.SetNextItemWidth(125);
+                ImGui.InputInt("##wordMin", ref wordMinMs, 0, 0);
+                ImGui.SameLine();
+                ImGui.TextUnformatted("～"); ImGui.SameLine();
+                ImGui.SetNextItemWidth(125);
+                ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
+                if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
+                if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
+                if (ImGui.Button("恢复默认间隔")) { keyMinMs = 30; keyMaxMs = 80; wordMinMs = 500; wordMaxMs = 1200; }
+                ImGui.EndDisabled();
+                if (ImGui.Button(saveLogs ? "关闭日志" : "保存日志")) OnCommand("", "toggle-logs");
+                ImGui.SameLine(); ImGui.TextUnformatted(saveLogs ? "已开启" : "已关闭");
             }
+            ImGui.BeginDisabled(trial != null);
             ImGui.Checkbox("循环开局", ref loopEnabled);
             ImGui.SameLine();
             ImGui.SetNextItemWidth(90);
@@ -135,13 +140,13 @@ public sealed partial class Plugin : IDalamudPlugin
         finally { ImGui.End(); }
     }
 
-    private void SaveTimingSettings()
+    private void SaveTimingSettings(bool persist = true)
     {
         var updated = new TimingSettings(keyMinMs, keyMaxMs, wordMinMs, wordMaxMs);
         if (updated.ValidationError != null) { timingMessage = updated.ValidationError; throw new InvalidDataException(timingMessage); }
-        if (updated != timingSettings || !File.Exists(TimingFile)) updated.Save(TimingFile);
+        if (persist && (updated != timingSettings || !File.Exists(TimingFile))) updated.Save(TimingFile);
         timingSettings = updated;
-        timingMessage = "已保存，启动时生效。";
+        timingMessage = persist ? "已保存，启动时生效。" : "本次运行生效，未保存文件。";
     }
 
     private void OnCommand(string command, string args)
@@ -163,17 +168,17 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var split = args.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         if (split.Length == 0 || split[0] == "ui") { ShowControlWindow(); return; }
+        if (split[0] == "toggle-logs") { SetLogSaving(!saveLogs); return; }
         if (split[0] == "save-timing") { if (trial == null) SaveTimingSettings(); return; }
         if (split[0] is "test" or "auto" or "loop")
         {
             if (trial != null) { ShowControlWindow(); chat.Print("[MakoMaster] 已等待或正在输入，请使用控制窗口的停止按钮。"); return; }
-            SaveTimingSettings();
+            SaveTimingSettings(saveLogs);
             var dictionary = vocabulary?.EffectiveDictionary ?? throw new InvalidDataException("词库未能加载，详见卫月日志");
             if (dictionary.Count == 0) throw new InvalidDataException("词库为空");
             if (split[0] == "loop") PrepareLoop();
             else roundLoop = null;
-            if (capture == null) Execute("start 180");
-            if (capture == null) return;
+            if (saveLogs && capture == null) Execute("start 180");
             continuousMode = split[0] != "test";
             captureUntil = continuousMode ? long.MaxValue : Math.Max(captureUntil, Environment.TickCount64 + 180000);
             trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings);
@@ -195,10 +200,13 @@ public sealed partial class Plugin : IDalamudPlugin
         if (split[0] == "off") { StopTrial("手动停止"); return; }
         if (split[0] == "start")
         {
+            if (!saveLogs) { chat.Print("[MakoMaster] 请先在高级设置中点击“保存日志”。"); return; }
             if (capture != null) { chat.Print("[MakoMaster] 正在采集。先 stop 可保存并结束本次采集。"); return; }
             var seconds = 180;
             if (split.Length > 1 && (!int.TryParse(split[1], out seconds) || seconds < 10 || seconds > 600))
             { chat.PrintError("[MakoMaster] 采集时间应为 10～600 秒。"); return; }
+            saveLogs = true;
+            if (vocabulary != null) vocabulary.PersistenceEnabled = true;
             var sessionFolder = Path.Combine(pi.AssemblyLocation.DirectoryName!, "captures");
             lastCapture = Path.Combine(sessionFolder, $"session-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.jsonl");
             capture = new CaptureSession(lastCapture);
@@ -212,7 +220,7 @@ public sealed partial class Plugin : IDalamudPlugin
             chat.Print("[MakoMaster] 文件：" + lastCapture);
             return;
         }
-        if (split[0] == "stop") { StopTrial("手动停止"); StopCapture("手动停止"); return; }
+        if (split[0] == "stop") { StopTrial("手动停止"); SetLogSaving(false); return; }
         if (split[0] == "status")
         {
             if (vocabulary != null) chat.Print($"[MakoMaster] 已记录 {vocabulary.SeenCount} 种题目，新增学习 {vocabulary.LearnedCount} 条；可用词库 {vocabulary.EffectiveDictionary.Count} 条。");
@@ -260,6 +268,7 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         if (results.Count == 0)
         { chat.Print("[MakoMaster] 未找到匹配。尝试较短片段，或用 list 查窗口名后 dump。"); return; }
+        if (!saveLogs) { chat.Print("[MakoMaster] 请先在高级设置中点击“保存日志”，再导出诊断文件。"); return; }
         var folder = Path.Combine(pi.GetPluginConfigDirectory(), "captures");
         Directory.CreateDirectory(folder);
         var file = Path.Combine(folder, $"capture-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}.json");
@@ -289,7 +298,7 @@ public sealed partial class Plugin : IDalamudPlugin
         while (captureBacklog.Count > 0 && capture.TryWrite(captureBacklog.Peek())) captureBacklog.Dequeue();
         if (captureBacklog.Count > 0) return;
         var now = Environment.TickCount64;
-        if (now >= captureUntil) { StopCapture("定时采集结束"); return; }
+        if (now >= captureUntil) { SetLogSaving(false); return; }
         if (now < nextSample) return;
         nextSample = now + 250;
         try
@@ -329,9 +338,42 @@ public sealed partial class Plugin : IDalamudPlugin
         { log.Error(ex, "MakoMaster automatic snapshot paused"); nextSample = now + 1000; PauseInput("界面暂时不可读，等待恢复", now); }
     }
 
+    private void SetLogSaving(bool enabled)
+    {
+        if (enabled)
+        {
+            try
+            {
+                saveLogs = true;
+                if (capture == null) Execute("start 600");
+                captureUntil = long.MaxValue;
+                if (vocabulary != null) { vocabulary.PersistenceEnabled = true; vocabulary.Flush(); }
+                WriteRecord(new { Kind = "LoggingEnabled", At = DateTimeOffset.Now,
+                    Running = trial != null, Continuous = continuousMode, TimingSettings = timingSettings });
+            }
+            catch
+            {
+                saveLogs = false;
+                if (vocabulary != null) vocabulary.PersistenceEnabled = false;
+                StopCapture("开启日志失败", stopInput: false);
+                throw;
+            }
+        }
+        else
+        {
+            try { vocabulary?.Flush(); }
+            finally
+            {
+                if (vocabulary != null) vocabulary.PersistenceEnabled = false;
+                saveLogs = false;
+                if (capture != null) StopCapture("已关闭日志保存", stopInput: false);
+            }
+        }
+    }
+
     private bool WriteRecord(object record)
     {
-        if (capture == null) return false;
+        if (!saveLogs || capture == null) return true;
         if (captureBacklog.Count > 0 || !capture.TryWrite(record)) captureBacklog.Enqueue(record);
         return true;
     }
@@ -386,7 +428,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void UpdateTrial(long now)
     {
         if (trial == null) return;
-        if (capture == null || capture.Error != null || captureBacklog.Count > 0)
+        if (saveLogs && (capture == null || capture.Error != null || captureBacklog.Count > 0))
         { PauseInput("等待开发日志写入恢复", now); return; }
         if (!NativeInput.ForegroundIsGame)
         { PauseInput("失焦暂停，回到游戏后自动继续", now); return; }
@@ -486,7 +528,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 Anchor = new { X = clientWidth * 0.5, Y = clientHeight },
                 Key = key == '\n' ? "Enter" : key == '\f' ? "PageDown" : key == '\b' ? "Backspace" : key?.ToString(), View = view }))
             { PauseInput("等待日志写盘", now); return; }
-            log.Information("MakoMaster input: {State}, key={Key}", trial.Result, key?.ToString() ?? "none");
+            if (saveLogs) log.Information("MakoMaster input: {State}, key={Key}", trial.Result, key?.ToString() ?? "none");
         }
         if (trial.Finished) { StopTrial(trial.Result); return; }
         if (key != null) keyboard.Press(key.Value, now);
@@ -510,9 +552,9 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!disposed) chat.Print($"[MakoMaster] 自动输入已停止，已完成 {completed} 题：" + reason);
     }
 
-    private void StopCapture(string reason)
+    private void StopCapture(string reason, bool stopInput = true)
     {
-        StopTrial("后台采集停止：" + reason);
+        if (stopInput) StopTrial("后台采集停止：" + reason);
         var session = capture;
         if (session == null) { if (!disposed) chat.Print("[MakoMaster] 当前未在采集。"); return; }
         capture = null;

@@ -25,11 +25,11 @@ internal sealed class VocabularyStore
     internal IReadOnlyDictionary<string, DictionaryEntry> EffectiveDictionary => effective;
     internal int SeenCount => seen.Count;
     internal int LearnedCount => learned.Count;
+    internal bool PersistenceEnabled { get; set; }
 
     internal VocabularyStore(string folder)
     {
         this.folder = folder;
-        Directory.CreateDirectory(folder);
         foreach (var entry in Read<DictionaryEntry>("dictionary.json")) effective.TryAdd(entry.Word, entry);
         foreach (var entry in Read<DictionaryEntry>("learned-dictionary.json"))
         {
@@ -100,6 +100,8 @@ internal sealed class VocabularyStore
 
     internal void Flush()
     {
+        if (!PersistenceEnabled) return;
+        Directory.CreateDirectory(folder);
         if (dirtyFallbacks)
         { WriteAtomic("fallback-words.json", fallbacks.Values.OrderBy(x => x.Word).ToArray()); dirtyFallbacks = false; }
         if (dirtySeen)

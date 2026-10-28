@@ -1,13 +1,14 @@
 {
-  "Author": "Local",
+  "Author": "DocherPap",
   "Name": "MakoMaster",
   "InternalName": "MakoMaster",
-  "AssemblyVersion": "0.10.0.0",
-  "Description": "测试版：绿色护盾最高优先，按当前样式区分可打断和不可打断读条；发送后不重试当前题目；危险技能在预计结束前后各半秒暂停。支持循环次数、词库学习和开发日志。",
+  "AssemblyVersion": "0.10.1.0",
+  "Description": "魔光键影自动输入与有限次数循环游玩。绿色护盾优先、按当前读条类型排序、整词及逐字候选匹配；危险技能预计结束前后各半秒暂停。文件保存默认关闭，可在高级设置中开启。",
   "Punchline": "魔光键影自动输入与循环游玩",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
   "LoadRequiredState": 0,
   "LoadSync": false,
-  "CanUnloadAsync": false
+  "CanUnloadAsync": false,
+  "RepoUrl": "https://github.com/DocherPap/MakoMaster"
 }

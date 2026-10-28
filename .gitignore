@@ -18,5 +18,6 @@ obj/
 *.dll
 *.pdb
 *.zip
+!dist/*.zip
 .env
 .env.*
