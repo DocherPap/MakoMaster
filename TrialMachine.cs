@@ -16,6 +16,7 @@ internal sealed class TrialMachine
     private readonly Dictionary<string, long> skipUntil = new();
     private readonly Dictionary<string, string> submitted = new();
     private string targetPath = "";
+    private int targetPriority;
     private Stage stage;
     private string word = "", normalizedWord = "", spelling = "", expected = "", prefix = "", desired = "";
     private string pageBefore = "", clearBefore = "", expectedCommit = "";
@@ -51,10 +52,28 @@ internal sealed class TrialMachine
     {
         if (Finished) return null;
         if (!view.Ready) { PauseForScene("等待下一关 / 小游戏输入界面", now); return null; }
-        if (now < nextActionAt) return null;
+
         var buffer = WordMatching.InputBuffer(view.Buffer);
         foreach (var path in submitted.Where(p => !view.Words.Any(w => w.Path == p.Key && WordMatching.Same(w.Text, p.Value))).Select(p => p.Key).ToArray())
             submitted.Remove(path);
+        if (stage is Stage.Typing or Stage.Search or Stage.PageWait or Stage.ChooseWait)
+        {
+            var current = view.Words.FirstOrDefault(w => w.Path == targetPath && WordMatching.Same(w.Text, word));
+            if (current != null) targetPriority = current.Priority;
+            foreach (var urgent in view.Words.Where(w => double.IsFinite(w.DistanceSquared) && w.Priority > targetPriority)
+                .OrderByDescending(w => w.Priority).ThenBy(w => w.DistanceSquared))
+            {
+                var key = WordMatching.Normalize(urgent.Text);
+                if (submitted.TryGetValue(urgent.Path, out var sentWord) && sentWord == key) continue;
+                if (skipUntil.TryGetValue(key, out var until) && until > now) continue;
+                var entry = FindEntry(urgent.Text);
+                var options = ReadingsFor(urgent.Text, entry);
+                if (options.Length == 0 || options.Any(r => r.Length == 0)) continue;
+                BeginClear(ClearDestination.Priority, now, "更高优先级目标：" + urgent.Text + "，清空后优先处理");
+                break;
+            }
+        }
+        if (now < nextActionAt) return null;
         if (stage == Stage.Idle)
         {
             if (view.Words.Count == 0) { Result = "等待题目"; return null; }
@@ -74,7 +93,7 @@ internal sealed class TrialMachine
                 }
                 if (selected == null) { Result = "等待新题目（已发送题目不重试，缺词已记录）"; return null; }
                 word = selected.Text; normalizedWord = WordMatching.Normalize(word);
-                targetPath = selected.Path;
+                targetPath = selected.Path; targetPriority = selected.Priority;
                 readingIndexes = new int[readings.Length]; characterIndex = 0;
                 characterMode = entry == null; spelling = entry?.Pinyin ?? "";
                 if (characterMode) Fallbacks.Enqueue((normalizedWord, "", "词库无整词，逐字输入"));
@@ -171,7 +190,7 @@ internal sealed class TrialMachine
             if (view.Buffer.Length == 0)
             {
                 if (clearDestination == ClearDestination.Characters) { characterMode = true; characterIndex = 0; PrepareUnit(now); }
-                else { stage = Stage.Idle; nextActionAt = now + timings.NextWord(random); }
+                else { stage = Stage.Idle; nextActionAt = clearDestination == ClearDestination.Priority ? now : now + timings.NextWord(random); }
                 return null;
             }
             clearBefore = view.Buffer; stage = Stage.ClearWait; changedAt = now; nextActionAt = now + timings.NextKey(random); return '\b';
@@ -244,5 +263,5 @@ internal sealed class TrialMachine
     private static string Fingerprint(TrialView view) => view.CandidatePage + "|" + string.Join("|", view.Candidates.OrderBy(p => p.Key).Select(p => p.Key + ":" + p.Value));
     internal void Stop(string reason) { stage = Stage.Done; Result = reason; }
     private enum Stage { Idle, Typing, Search, PageWait, ChooseWait, Clear, ClearWait, AfterSubmit, Done }
-    private enum ClearDestination { Idle, Characters }
+    private enum ClearDestination { Idle, Characters, Priority }
 }

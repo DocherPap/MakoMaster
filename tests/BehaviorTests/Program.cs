@@ -111,7 +111,7 @@ Check(tiers.OrderByDescending(w=>w.Priority).ThenBy(w=>w.DistanceSquared).Select
 var tierMachine = new TrialMachine(dictionary,0,new Random(1),true,timing);
 tierMachine.Tick(new(true,"",tiers,new Dictionary<int,string>()),0);
 Check(tierMachine.Target=="计步","green barrier did not outrank all casts");
-Check(new TimingSettings() == new TimingSettings(30,100,800,1600),"new default timing ranges");
+Check(new TimingSettings() == new TimingSettings(40,100,800,1600),"new default timing ranges");
 Check(new TimingSettings(10,30,100,200).ValidationError==null,"valid short key timing rejected");
 
 // Count a whole result once, never count individual waves or loading, exit the last result before stopping.
@@ -146,14 +146,14 @@ Check(!gate.Tick([new("/a","运动体探知干扰器",5)],0),"paused more than h
 Check(!gate.Tick([new("/a","运动体探知干扰器",0.501)],4499),"precise cast boundary too early");
 Check(gate.Tick([new("/a","运动体探知干扰器",0.5)],4500),"missing pre-cast half-second pause");
 Check(gate.Tick([],5000),"missing post-cast pause");
-Check(gate.Tick([],5500) && !gate.Tick([],5501),"post-cast pause did not expire at half second");
-Check(!gate.Tick([new("/b","诅咒视线",null)],6000) && gate.AwaitingProgress,"missing timer froze entire cast");
+Check(gate.Tick([],6500) && !gate.Tick([],6501),"post-cast pause did not expire at 1.5 seconds");
+Check(!gate.Tick([new("/b","诅咒视线",null)],7000) && gate.AwaitingProgress,"missing timer froze entire cast");
 Check(!gate.Tick([new("/b","诅咒视线",null)],9000),"missing timer paused before cast end");
-Check(gate.Tick([],10000) && !gate.Tick([],10501),"curse did not resume after disappearance guard");
+Check(gate.Tick([],10000) && !gate.Tick([],11501),"curse did not resume after disappearance guard");
 gate.Reset();
 Check(gate.Tick([new("/a","运动体探知干扰器",0.2),new("/b","诅咒视线",0.8)],0),"overlap initial pause");
 Check(gate.Tick([new("/b","诅咒视线",0.2)],600),"overlap gap incorrectly resumed typing");
-Check(gate.Tick([],800) && !gate.Tick([],1301),"overlapping guards failed to expire");
+Check(gate.Tick([],800) && !gate.Tick([],2301),"overlapping guards failed to expire");
 
 // Pause/resume retains the locked composition and does not trigger an input timeout.
 var frozen=new TrialMachine(dictionary,0,new Random(1),true,timing);
@@ -254,7 +254,7 @@ var progressGate=new SkillPauseGate();
 for(long t=0;t<4500;t+=50)
     Check(!progressGate.Tick([new("/progress","运动体探知干扰器",null,t/5000.0)],t),"progress-derived pause began before final half-second");
 Check(progressGate.Tick([new("/progress","运动体探知干扰器",null,0.9)],4500),"progress-derived pause did not begin in final half-second");
-Check(progressGate.Tick([],5000) && progressGate.Tick([],5500) && !progressGate.Tick([],5501),"progress-derived post-cast guard wrong");
+Check(progressGate.Tick([],5000) && progressGate.Tick([],6500) && !progressGate.Tick([],6501),"progress-derived post-cast guard wrong");
 Console.WriteLine("PASS: failed submissions are never retried while target remains; replacement targets rearm; live cast styles outrank history; fill-progress inference pauses only final/post half-second.");
 
 // Replay only anonymized timing/progress samples from the observed native fill node.
@@ -270,7 +270,7 @@ foreach(var sample in capturedSamples)
 }
 Check(firstPausedAt is >=3500 and <=4300,"recorded progress did not gate near the end: "+firstPausedAt);
 Check(capturedGate.Tick([],lastCapturedMs+100),"recorded cast end missing guard");
-Check(!capturedGate.Tick([],lastCapturedMs+601),"recorded cast guard did not expire");
+Check(!capturedGate.Tick([],lastCapturedMs+1601),"recorded cast guard did not expire");
 Console.WriteLine("PASS: anonymized actual native cast-fill samples pause near cast completion, not its beginning.");
 
 // Default startup and in-memory learning must not create any directories or files.
@@ -288,3 +288,28 @@ var savedContents=File.ReadAllText(Path.Combine(disabledFolder,"fallback-words.j
 memoryOnly.PersistenceEnabled=false;memoryOnly.RecordFallback("近","jin","关闭后内存记录");memoryOnly.Flush();
 Check(File.ReadAllText(Path.Combine(disabledFolder,"fallback-words.json"))==savedContents,"turning saving off still changed a file");
 Console.WriteLine("PASS: files/directories are absent by default; learning stays in memory; opt-in persists; opt-out stops writes.");
+
+// Higher tiers appearing mid-word preempt immediately, even during a key delay.
+var preempt=new TrialMachine(dictionary,0,new Random(1),true,timing);
+var normalWord=new TrialWord("/ordinary/20","近",1,0);
+var interruptWord=new TrialWord("/interrupt/20","计步",9999,2,"自爆");
+var shieldWord=new TrialWord("/shield/20","计数",99999,3);
+Check(preempt.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0)=='j',"preemption setup did not start normal word");
+Check(preempt.Tick(new(true,"j",[normalWord,interruptWord],new Dictionary<int,string>()),20)=='\b',"new interruptible cast waited for the normal word or its timer");
+preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),120);
+preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),130);
+Check(preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),140)=='j' && preempt.Target=="计步","interruptible cast was not selected immediately after clearing");
+Check(preempt.Tick(new(true,"j",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),150)=='\b',"new shield did not preempt an interruptible cast");
+preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),250);
+preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),260);
+Check(preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),270)=='j' && preempt.Target=="计数","shield did not become the selected target");
+Check(preempt.CompletedCount==0,"abandoned partial inputs were counted as sent");
+Check(preempt.Tick(new(true,"j",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),370)=='i',"lower-tier cast preempted an active shield");
+var equalTier=new TrialMachine(dictionary,0,new Random(1),true,timing);
+Check(equalTier.Tick(new(true,"",[new("/far/20","计步",9999,1)],new Dictionary<int,string>()),0)=='j',"equal-tier setup");
+Check(equalTier.Tick(new(true,"j",[new("/far/20","计步",9999,1),new("/near/20","近",1,1)],new Dictionary<int,string>()),100)=='i' && equalTier.Target=="计步","same-tier distance change caused a mid-word switch");
+var untypable=new TrialMachine(dictionary,0,new Random(1),true,timing);
+untypable.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0);
+Check(untypable.Tick(new(true,"j",[normalWord,new("/missing/20","龘",0,3)],new Dictionary<int,string>()),100)=='i',"unreadable urgent word caused an endless clear/restart");
+Check(SkillPauseGate.BeforeMs==500 && SkillPauseGate.AfterMs==1500,"dangerous-skill pause interval constants wrong");
+Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 1.5 seconds after cast.");

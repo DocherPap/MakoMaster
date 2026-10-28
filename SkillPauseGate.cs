@@ -23,6 +23,7 @@ internal sealed class CastProgressTracker
 internal sealed class SkillPauseGate
 {
     internal static bool IsDangerous(string skill) => WordMatching.Same(skill, "运动体探知干扰器") || WordMatching.Same(skill, "诅咒视线");
+    internal const int BeforeMs = 500, AfterMs = 1500;
     private readonly Dictionary<string, long> ends = new();
     private readonly HashSet<string> previouslyVisible = new();
     private readonly CastProgressTracker progressTracker = new();
@@ -39,8 +40,8 @@ internal sealed class SkillPauseGate
         }
         foreach (var slot in previouslyVisible.Where(s => !visible.Contains(s))) ends[slot] = now;
         previouslyVisible.Clear(); previouslyVisible.UnionWith(visible); progressTracker.Keep(visible);
-        foreach (var slot in ends.Where(p => now > p.Value + 500 && !visible.Contains(p.Key)).Select(p => p.Key).ToArray()) ends.Remove(slot);
-        return ends.Any(p => now >= p.Value - 500 && now <= p.Value + 500);
+        foreach (var slot in ends.Where(p => now > p.Value + AfterMs && !visible.Contains(p.Key)).Select(p => p.Key).ToArray()) ends.Remove(slot);
+        return ends.Any(p => now >= p.Value - BeforeMs && now <= p.Value + AfterMs);
     }
     internal void Reset() { ends.Clear(); previouslyVisible.Clear(); progressTracker.Reset(); AwaitingProgress = false; }
 }

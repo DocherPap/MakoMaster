@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace MakoMaster;
 
-internal sealed record TimingSettings(int KeyMinMs = 30, int KeyMaxMs = 100,
+internal sealed record TimingSettings(int KeyMinMs = 40, int KeyMaxMs = 100,
     int WordMinMs = 800, int WordMaxMs = 1600)
 {
     internal string? ValidationError => KeyMinMs < 10 || KeyMaxMs > 2000 || KeyMinMs > KeyMaxMs

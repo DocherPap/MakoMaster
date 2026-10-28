@@ -37,7 +37,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private bool showControlWindow = true;
     private string lastRunResult = "尚未启动";
     private TimingSettings timingSettings = new();
-    private int keyMinMs = 30, keyMaxMs = 100, wordMinMs = 800, wordMaxMs = 1600;
+    private int keyMinMs = 40, keyMaxMs = 100, wordMinMs = 800, wordMaxMs = 1600;
     private string timingMessage = "";
     private readonly WordResolver wordResolver = new();
     private readonly Queue<object> captureBacklog = new();
@@ -88,7 +88,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextUnformatted(trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
             if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
             if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
-            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前后各 0.5 秒暂停");
+            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 0.5 秒至结束后 1.5 秒暂停");
             if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
             ImGui.Separator();
             if (ImGui.CollapsingHeader("高级设置"))
@@ -110,7 +110,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
                 if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
                 if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
-                if (ImGui.Button("恢复默认间隔")) { keyMinMs = 30; keyMaxMs = 100; wordMinMs = 800; wordMaxMs = 1600; }
+                if (ImGui.Button("恢复默认间隔")) { keyMinMs = 40; keyMaxMs = 100; wordMinMs = 800; wordMaxMs = 1600; }
                 ImGui.EndDisabled();
                 if (ImGui.Button(saveLogs ? "关闭日志" : "保存日志")) OnCommand("", "toggle-logs");
                 ImGui.SameLine(); ImGui.TextUnformatted(saveLogs ? "已开启" : "已关闭");
