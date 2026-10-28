@@ -49,17 +49,30 @@ public sealed partial class Plugin
             EventType = (byte)ev.AtkEventType, ev.EventParam, NodeId = native == null || native->Node == null ? (uint?)null : native->Node->NodeId });
     }
 
+    // Identified from the entry NPC used for the captured registration flow.
+    private const uint EntryNpcBaseId = 1058751;
+
+    private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindEntryNpc()
+    {
+        var player = objects.LocalPlayer;
+        if (player == null) return null;
+        return objects.Where(o => o.IsValid() && o.IsTargetable && o.ObjectKind == ObjectKind.EventNpc
+                && o.BaseId == EntryNpcBaseId)
+            .OrderBy(o => Vector3.DistanceSquared(player.Position, o.Position)).FirstOrDefault();
+    }
+
     private void PrepareLoop()
     {
         if (loopCount is < 1 or > 9999) throw new InvalidDataException("循环次数应为 1～9999。");
-        var npc = targetManager.Target;
-        if (!clientState.IsLoggedIn || npc == null || !npc.IsValid() || !npc.IsTargetable || npc.ObjectKind != ObjectKind.EventNpc)
-            throw new InvalidDataException("请先在入场区域选中魔光键影的入场 NPC，再启动循环。");
-        loopTerritory = clientState.TerritoryType; loopNpcDataId = npc.BaseId; loopNpcName = npc.Name.TextValue;
-        if (loopNpcDataId == 0 || string.IsNullOrWhiteSpace(loopNpcName)) throw new InvalidDataException("所选 NPC 标识不完整。");
-        roundLoop = new(loopCount); loopMessage = "";
+        if (!clientState.IsLoggedIn || objects.LocalPlayer == null)
+            throw new InvalidDataException("请进入游戏中的魔光键影入场区域后启动循环。");
+        var npc = FindEntryNpc();
+        loopTerritory = clientState.TerritoryType;
+        loopNpcDataId = EntryNpcBaseId;
+        loopNpcName = npc?.Name.TextValue ?? "";
+        roundLoop = new(loopCount);
+        loopMessage = npc == null ? "正在寻找魔光键影入场 NPC，请靠近入场区域。" : "";
     }
-
     // Returns true while menus / scene transitions own input, or after the finite loop stops.
     private unsafe bool UpdateRoundLoop(long now)
     {
@@ -86,10 +99,14 @@ public sealed partial class Plugin
         loopMessage = "";
         if (action == RoundAction.Interact)
         {
-            var npc = objects.FirstOrDefault(o => o.IsValid() && o.IsTargetable && o.ObjectKind == ObjectKind.EventNpc
-                && o.BaseId == loopNpcDataId && o.Name.TextValue == loopNpcName);
+            var npc = FindEntryNpc();
             var player = objects.LocalPlayer;
-            if (npc == null || player == null) loopMessage = "等待原入场 NPC 出现；不会自动移动。";
+            if (npc != null && player != null)
+            {
+                loopNpcName = npc.Name.TextValue;
+                if (targetManager.Target?.GameObjectId != npc.GameObjectId) targetManager.Target = npc;
+            }
+            if (npc == null || player == null) loopMessage = "正在寻找魔光键影入场 NPC，请靠近入场区域。";
             else if (Vector3.Distance(player.Position, npc.Position) > 6) loopMessage = "距离入场 NPC 太远，请靠近后继续。";
             else if (ReadNamedAddon("Talk") != null || ReadNamedAddon("SelectString") != null || ReadNamedAddon("SelectYesno") != null)
                 loopMessage = "等待关闭当前对话；当前菜单需记录后适配。";

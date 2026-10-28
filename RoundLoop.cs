@@ -8,7 +8,7 @@ internal sealed class RoundLoop(int limit)
 {
     internal int Limit { get; } = limit is >= 1 and <= 9999 ? limit : throw new ArgumentOutOfRangeException(nameof(limit));
     internal int Completed { get; private set; }
-    internal string Status { get; private set; } = "等待与选中的 NPC 交互";
+    internal string Status { get; private set; } = "等待自动选择入场 NPC";
     private bool played, leaving, registered;
     private long nextAction, homeSince;
     private string sentScreen = "";
@@ -39,7 +39,7 @@ internal sealed class RoundLoop(int limit)
         {
             if (view.Confirm) { Status = "确认魔光键影出发"; return RoundAction.Accept; }
             if (view.Entry && !played) { Status = "申请参加魔光键影"; return RoundAction.Apply; }
-            if (view.Home && !played && !registered) { Status = "与记住的 NPC 交互"; return RoundAction.Interact; }
+            if (view.Home && !played && !registered) { Status = "自动选择入场 NPC 并交互"; return RoundAction.Interact; }
         }
         Status = played ? "等待下一关或成绩窗口" : "等待申请、匹配或出发界面";
         return RoundAction.None;

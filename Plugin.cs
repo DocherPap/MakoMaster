@@ -123,7 +123,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.SameLine(); ImGui.TextUnformatted("次后停止");
             if (loopEnabled)
             {
-                ImGui.TextWrapped("先选中入场 NPC，再点击开始。每次成绩结算计为一局。");
+                ImGui.TextWrapped("自动选择入场 NPC，靠近后自动开始；每次成绩结算计为一局。");
             }
             ImGui.EndDisabled();
             ImGui.Separator();
