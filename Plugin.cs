@@ -88,7 +88,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextUnformatted(trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
             if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
             if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
-            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 0.5 秒至结束后 1.5 秒暂停");
+            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2 秒暂停");
             if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
             ImGui.Separator();
             if (ImGui.CollapsingHeader("高级设置"))

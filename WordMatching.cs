@@ -8,7 +8,7 @@ internal static class WordMatching
     internal static string InputBuffer(string text) => Normalize(text.Normalize(System.Text.NormalizationForm.FormC))
         .Replace('ü', 'v').Replace('Ü', 'V');
     internal static bool IsBarrierColor(uint rgba) => (rgba & 0x00FFFFFF) == 0x0074F8A0;
-    internal static bool KnownInterruptibleSkill(string skill) => Same(skill, "？针刺") || Same(skill, "霹雳炸弹");
+    internal static bool KnownInterruptibleSkill(string skill) => Same(skill, "？针刺") || Same(skill, "霹雳炸弹") || Same(skill, "黏菌爆发");
     internal static string Slot(string path) { var next = path.IndexOf('/', 1); return next < 0 ? path : path[..next]; }
 }
 internal sealed record WordObservation(string Path, string Text, bool TextVisible, bool ContainerVisible, double DistanceSquared, uint TextColor = 0xFFFFFFFF);

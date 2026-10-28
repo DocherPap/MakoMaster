@@ -23,7 +23,7 @@ internal sealed class CastProgressTracker
 internal sealed class SkillPauseGate
 {
     internal static bool IsDangerous(string skill) => WordMatching.Same(skill, "运动体探知干扰器") || WordMatching.Same(skill, "诅咒视线");
-    internal const int BeforeMs = 500, AfterMs = 1500;
+    internal const int BeforeMs = 1000, AfterMs = 2000;
     private readonly Dictionary<string, long> ends = new();
     private readonly HashSet<string> previouslyVisible = new();
     private readonly CastProgressTracker progressTracker = new();

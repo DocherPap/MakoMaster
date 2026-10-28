@@ -143,17 +143,17 @@ Check(stale.Tick(result,0)==RoundAction.None && stale.Completed==0,"pre-existing
 // Both dangerous skills gate every key; overlapping casts extend the pause.
 var gate=new SkillPauseGate();
 Check(!gate.Tick([new("/a","运动体探知干扰器",5)],0),"paused more than half a second early with precise data");
-Check(!gate.Tick([new("/a","运动体探知干扰器",0.501)],4499),"precise cast boundary too early");
-Check(gate.Tick([new("/a","运动体探知干扰器",0.5)],4500),"missing pre-cast half-second pause");
+Check(!gate.Tick([new("/a","运动体探知干扰器",1.001)],3999),"precise cast boundary too early");
+Check(gate.Tick([new("/a","运动体探知干扰器",1)],4000),"missing pre-cast one-second pause");
 Check(gate.Tick([],5000),"missing post-cast pause");
-Check(gate.Tick([],6500) && !gate.Tick([],6501),"post-cast pause did not expire at 1.5 seconds");
-Check(!gate.Tick([new("/b","诅咒视线",null)],7000) && gate.AwaitingProgress,"missing timer froze entire cast");
+Check(gate.Tick([],7000) && !gate.Tick([],7001),"post-cast pause did not expire at 2 seconds");
+Check(!gate.Tick([new("/b","诅咒视线",null)],7500) && gate.AwaitingProgress,"missing timer froze entire cast");
 Check(!gate.Tick([new("/b","诅咒视线",null)],9000),"missing timer paused before cast end");
-Check(gate.Tick([],10000) && !gate.Tick([],11501),"curse did not resume after disappearance guard");
+Check(gate.Tick([],10000) && !gate.Tick([],12001),"curse did not resume after disappearance guard");
 gate.Reset();
 Check(gate.Tick([new("/a","运动体探知干扰器",0.2),new("/b","诅咒视线",0.8)],0),"overlap initial pause");
 Check(gate.Tick([new("/b","诅咒视线",0.2)],600),"overlap gap incorrectly resumed typing");
-Check(gate.Tick([],800) && !gate.Tick([],2301),"overlapping guards failed to expire");
+Check(gate.Tick([],800) && !gate.Tick([],2801),"overlapping guards failed to expire");
 
 // Pause/resume retains the locked composition and does not trigger an input timeout.
 var frozen=new TrialMachine(dictionary,0,new Random(1),true,timing);
@@ -249,13 +249,13 @@ var liveCast=new WordResolver().Resolve([
 Check(liveCast.Single(w=>w.Text=="计步").Priority==1 && liveCast.Single(w=>w.Text=="计数").Priority==2,"current cast style did not override skill history");
 Check(liveCast.OrderByDescending(w=>w.Priority).First().Text=="计数","interruptible cast failed to outrank closer uninterruptible cast");
 
-// Infer timing from a bar filling over five seconds; do not freeze its first 4.5 seconds.
+// Infer timing from a bar filling over five seconds; do not freeze its first four seconds.
 var progressGate=new SkillPauseGate();
-for(long t=0;t<4500;t+=50)
-    Check(!progressGate.Tick([new("/progress","运动体探知干扰器",null,t/5000.0)],t),"progress-derived pause began before final half-second");
-Check(progressGate.Tick([new("/progress","运动体探知干扰器",null,0.9)],4500),"progress-derived pause did not begin in final half-second");
-Check(progressGate.Tick([],5000) && progressGate.Tick([],6500) && !progressGate.Tick([],6501),"progress-derived post-cast guard wrong");
-Console.WriteLine("PASS: failed submissions are never retried while target remains; replacement targets rearm; live cast styles outrank history; fill-progress inference pauses only final/post half-second.");
+for(long t=0;t<4000;t+=50)
+    Check(!progressGate.Tick([new("/progress","运动体探知干扰器",null,t/5000.0)],t),"progress-derived pause began before final one-second");
+Check(progressGate.Tick([new("/progress","运动体探知干扰器",null,0.8)],4000),"progress-derived pause did not begin in final one-second");
+Check(progressGate.Tick([],5000) && progressGate.Tick([],7000) && !progressGate.Tick([],7001),"progress-derived post-cast guard wrong");
+Console.WriteLine("PASS: failed submissions are never retried while target remains; replacement targets rearm; live cast styles outrank history; fill-progress inference pauses only final/post one-second.");
 
 // Replay only anonymized timing/progress samples from the observed native fill node.
 var capturedSamples=JsonSerializer.Deserialize<JsonElement[]>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"cast-progress.json")))!;
@@ -265,12 +265,12 @@ foreach(var sample in capturedSamples)
     var ms=sample.GetProperty("Ms").GetInt64(); var fraction=sample.GetProperty("Progress").GetDouble();
     var paused=capturedGate.Tick([new("/recorded","运动体探知干扰器",null,fraction)],ms);
     if(paused && firstPausedAt==null)firstPausedAt=ms;
-    if(ms<3500)Check(!paused,"recorded progress paused during the early cast");
+    if(ms<3000)Check(!paused,"recorded progress paused during the early cast");
     lastCapturedMs=ms;
 }
-Check(firstPausedAt is >=3500 and <=4300,"recorded progress did not gate near the end: "+firstPausedAt);
+Check(firstPausedAt is >=3000 and <=3900,"recorded progress did not gate near the end: "+firstPausedAt);
 Check(capturedGate.Tick([],lastCapturedMs+100),"recorded cast end missing guard");
-Check(!capturedGate.Tick([],lastCapturedMs+1601),"recorded cast guard did not expire");
+Check(!capturedGate.Tick([],lastCapturedMs+2101),"recorded cast guard did not expire");
 Console.WriteLine("PASS: anonymized actual native cast-fill samples pause near cast completion, not its beginning.");
 
 // Default startup and in-memory learning must not create any directories or files.
@@ -311,8 +311,8 @@ Check(equalTier.Tick(new(true,"j",[new("/far/20","计步",9999,1),new("/near/20"
 var untypable=new TrialMachine(dictionary,0,new Random(1),true,timing);
 untypable.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0);
 Check(untypable.Tick(new(true,"j",[normalWord,new("/missing/20","龘",0,3)],new Dictionary<int,string>()),100)=='i',"unreadable urgent word caused an endless clear/restart");
-Check(SkillPauseGate.BeforeMs==500 && SkillPauseGate.AfterMs==1500,"dangerous-skill pause interval constants wrong");
-Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 1.5 seconds after cast.");
+Check(SkillPauseGate.BeforeMs==1000 && SkillPauseGate.AfterMs==2000,"dangerous-skill pause interval constants wrong");
+Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 2 seconds after cast.");
 
 // Confirmed skill classification survives transient hidden interrupt markers.
 var needleWords=new WordResolver().Resolve([
@@ -328,3 +328,13 @@ var bombWords=new WordResolver().Resolve([
 Check(bombWords.Single(w=>w.Text=="计步").Priority==2,"confirmed bomb skill was demoted by a hidden marker");
 Check(bombWords.OrderByDescending(w=>w.Priority).Select(w=>w.Text).SequenceEqual(new[]{"近","计步","计数"}),"shield/bomb/uninterruptible order wrong");
 Console.WriteLine("PASS: confirmed bomb interruptibility survives hidden markers and stays below shields.");
+
+foreach(var confirmedSkill in new[]{"？针刺","霹雳炸弹","黏菌爆发"})
+{
+    var resolved=new WordResolver().Resolve([
+        new("/skill/20","计步",true,true,9999),new("/other/20","计数",true,true,1),new("/shield/20","近",true,true,99999,0xFF74F8A0)
+    ],dictionary,new Dictionary<string,string>{{"/skill",confirmedSkill},{"/other","其他技能"}},new HashSet<string>(),new Dictionary<string,bool>{{"/skill",false},{"/other",false}});
+    Check(resolved.Single(w=>w.Text=="计步").Priority==2,"confirmed interruptible skill demoted: "+confirmedSkill);
+    Check(resolved.OrderByDescending(w=>w.Priority).Select(w=>w.Text).SequenceEqual(new[]{"近","计步","计数"}),"shield/interruptible/other order wrong: "+confirmedSkill);
+}
+Console.WriteLine("PASS: needle, thunder bomb and slime burst remain interruptible despite hidden markers.");
