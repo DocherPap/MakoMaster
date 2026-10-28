@@ -20,7 +20,9 @@ public sealed partial class Plugin
     private bool loopEnabled;
     private int loopCount = 1;
     private RoundLoop? roundLoop;
-    private uint loopTerritory, loopNpcDataId;
+    private uint? loopTerritory;
+    private uint loopNpcDataId;
+    private string lastLoopScene = "";
     private string loopNpcName = "", loopMessage = "";
     private readonly SkillPauseGate skillPause = new();
     private bool skillPaused;
@@ -67,7 +69,8 @@ public sealed partial class Plugin
         if (!clientState.IsLoggedIn || objects.LocalPlayer == null)
             throw new InvalidDataException("请进入游戏中的魔光键影入场区域后启动循环。");
         var npc = FindEntryNpc();
-        loopTerritory = clientState.TerritoryType;
+        loopTerritory = npc == null ? null : clientState.TerritoryType;
+        lastLoopScene = "";
         loopNpcDataId = EntryNpcBaseId;
         loopNpcName = npc?.Name.TextValue ?? "";
         roundLoop = new(loopCount);
@@ -82,12 +85,20 @@ public sealed partial class Plugin
         var confirm = ReadNamedAddon("ContentsFinderConfirm");
         var game = ReadNamedAddon("KTGInput") != null || ReadNamedAddon("KTGEWord") != null || ReadNamedAddon("_KTGCountDown") != null;
         var loading = !clientState.IsLoggedIn || objects.LocalPlayer == null || ReadNamedAddon("NowLoading") != null;
-        var home = clientState.TerritoryType == loopTerritory && !loading;
+        var entryNpc = loading ? null : FindEntryNpc();
         var validConfirm = confirm?.Nodes.Any(n => n.Visible && n.Text == "魔光键影") == true;
         var validEntry = entry?.Nodes.Any(n => n.Visible && n.Text == "魔光键影") == true;
         if (confirm != null && !validConfirm)
         { loopMessage = "等待处理其他任务的出发确认。"; return true; }
-        var view = new RoundView(home, loading, game, validEntry, validConfirm, results != null);
+        var scene = new RoundScene(clientState.TerritoryType, loading, game, validEntry, validConfirm, results != null, entryNpc != null);
+        if (scene.HasEntryEvidence) loopTerritory = scene.Territory;
+        var view = scene.ToView(loopTerritory);
+        var sceneSignature = JsonSerializer.Serialize(new { Scene = scene, HomeTerritory = loopTerritory });
+        if (sceneSignature != lastLoopScene)
+        {
+            lastLoopScene = sceneSignature;
+            WriteRecord(new { Kind = "LoopScene", At = DateTimeOffset.Now, Scene = scene, HomeTerritory = loopTerritory, View = view });
+        }
         var oldCompleted = roundLoop.Completed;
         var action = roundLoop.Tick(view, now);
         if (oldCompleted != roundLoop.Completed)
@@ -135,7 +146,7 @@ public sealed partial class Plugin
             roundLoop.ActionSent(action, now);
             WriteRecord(new { Kind = "LoopAction", At = DateTimeOffset.Now, Action = action.ToString(), roundLoop.Completed, roundLoop.Limit });
         }
-        return !game || results != null || loading;
+        return !view.Game || results != null || loading;
     }
 
     private unsafe bool ClickRegisteredButton(string name, uint nodeId, string label)

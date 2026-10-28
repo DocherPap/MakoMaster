@@ -338,3 +338,27 @@ foreach(var confirmedSkill in new[]{"？针刺","霹雳炸弹","黏菌爆发"})
     Check(resolved.OrderByDescending(w=>w.Priority).Select(w=>w.Text).SequenceEqual(new[]{"近","计步","计数"}),"shield/interruptible/other order wrong: "+confirmedSkill);
 }
 Console.WriteLine("PASS: needle, thunder bomb and slime burst remain interruptible despite hidden markers.");
+
+// Starting inside a minigame must not register that territory as the NPC's home.
+var insideScene=new RoundScene(999,false,true,false,false,false,false);
+var insideView=insideScene.ToView(null);
+Check(insideView.Game && !insideView.Home,"in-game startup was mistaken for NPC home");
+var returningScene=new RoundScene(123,false,true,false,false,false,true);
+var returnedView=returningScene.ToView(null);
+Check(returnedView.Home && !returnedView.Game,"visible entry NPC did not override stale game UI");
+var registrationScene=new RoundScene(123,false,true,true,false,false,false);
+Check(registrationScene.ToView(null).Home && !registrationScene.ToView(null).Game,"registration window failed to identify home");
+Check(!returningScene.ToView(999).Game && returningScene.ToView(999).Home,"wrong startup territory blocked observed entry NPC");
+Check(!(returningScene with {Loading=true}).ToView(123).Home,"loading should never identify home");
+Check(!new RoundScene(222,false,false,false,false,false,false).ToView(123).Home,"unrelated territory was accepted as home");
+var resumedLoop=new RoundLoop(2);
+resumedLoop.Tick(insideView,100);
+Check(resumedLoop.Tick(new(false,false,false,false,false,true),1000)==RoundAction.Exit && resumedLoop.Completed==1,"mid-game startup did not recognize its result");
+Check(resumedLoop.Tick(returnedView,2000)==RoundAction.None,"return stabilization bypassed");
+Check(resumedLoop.Tick(returnedView,3600)==RoundAction.Interact,"stale game UI or wrong original territory stalled the next NPC interaction");
+var finalLoop=new RoundLoop(1);
+finalLoop.Tick(insideView,100);
+finalLoop.Tick(new(false,false,false,false,false,true),1000);
+finalLoop.Tick(returnedView,2000);
+Check(finalLoop.Tick(returnedView,3600)==RoundAction.Finish,"last round did not stop after returning with stale UI");
+Console.WriteLine("PASS: in-game loop startup; NPC/entry evidence overrides stale UI and wrong startup territory; loading/unrelated-zone guards; restart or finish after result.");

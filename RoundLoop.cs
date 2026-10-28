@@ -3,6 +3,17 @@ namespace MakoMaster;
 internal enum RoundAction { None, Interact, Apply, Accept, Exit, Finish }
 internal sealed record RoundView(bool Home, bool Loading, bool Game, bool Entry, bool Confirm, bool Results);
 
+// A known entry NPC or registration window is stronger evidence than lingering game UI.
+internal sealed record RoundScene(uint Territory, bool Loading, bool GameUi, bool Entry, bool Confirm, bool Results, bool EntryNpc)
+{
+    internal bool HasEntryEvidence => !Loading && (EntryNpc || Entry);
+    internal RoundView ToView(uint? homeTerritory)
+    {
+        var game = GameUi && !HasEntryEvidence;
+        var home = !Loading && (HasEntryEvidence || homeTerritory == Territory && !game);
+        return new(home, Loading, game, Entry, Confirm, Results);
+    }
+}
 // A result window completes a round; waves, empty words and loading screens do not.
 internal sealed class RoundLoop(int limit)
 {
