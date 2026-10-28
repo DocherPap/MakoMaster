@@ -1,0 +1,22 @@
+# Captures and local runtime data
+captures/
+**/captures/
+seen-words.json
+learned-dictionary.json
+fallback-words.json
+timing-settings.json
+*.tmp
+*.log
+
+# Build products and local tools
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.dll
+*.pdb
+*.zip
+.env
+.env.*
