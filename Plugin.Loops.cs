@@ -200,7 +200,8 @@ public sealed partial class Plugin
         foreach (var row in casting?.Nodes.Where(n => n.Visible && n.NodeId == 4 && n.Text.Length > 0) ?? [])
         {
             var slot = WordMatching.Slot(row.Path);
-            // Read the current countdown/interrupt marker, not a skill-name guess.
+            if (WordMatching.KnownInterruptibleSkill(row.Text)) { kinds[slot] = true; continue; }
+            // Other skills use the current countdown/interrupt marker.
             var marker = casting!.Visuals?.FirstOrDefault(v => v.NodeId == 7 && WordMatching.Slot(v.Path) == slot);
             var countdown = casting.Nodes.FirstOrDefault(n => n.NodeId == 5 && WordMatching.Slot(n.Path) == slot);
             if (marker != null || countdown != null) kinds[slot] = marker?.Visible == true || countdown?.Visible == true;

@@ -313,3 +313,18 @@ untypable.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0);
 Check(untypable.Tick(new(true,"j",[normalWord,new("/missing/20","龘",0,3)],new Dictionary<int,string>()),100)=='i',"unreadable urgent word caused an endless clear/restart");
 Check(SkillPauseGate.BeforeMs==500 && SkillPauseGate.AfterMs==1500,"dangerous-skill pause interval constants wrong");
 Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 1.5 seconds after cast.");
+
+// Confirmed skill classification survives transient hidden interrupt markers.
+var needleWords=new WordResolver().Resolve([
+    new("/needle/20","计步",true,true,9999),new("/cast/20","计数",true,true,1),new("/shield/20","近",true,true,99999,0xFF74F8A0)
+],dictionary,new Dictionary<string,string>{{"/needle","？针刺"},{"/cast","其他技能"}},new HashSet<string>(),new Dictionary<string,bool>{{"/needle",false},{"/cast",false}});
+Check(needleWords.Single(w=>w.Text=="计步").Priority==2,"confirmed needle skill was demoted by a hidden marker");
+Check(needleWords.OrderByDescending(w=>w.Priority).Select(w=>w.Text).SequenceEqual(new[]{"近","计步","计数"}),"shield/needle/uninterruptible order wrong");
+Console.WriteLine("PASS: confirmed needle interruptibility survives hidden markers and stays below shields.");
+
+var bombWords=new WordResolver().Resolve([
+    new("/bomb/20","计步",true,true,9999),new("/cast/20","计数",true,true,1),new("/shield/20","近",true,true,99999,0xFF74F8A0)
+],dictionary,new Dictionary<string,string>{{"/bomb","霹雳炸弹"},{"/cast","其他技能"}},new HashSet<string>(),new Dictionary<string,bool>{{"/bomb",false},{"/cast",false}});
+Check(bombWords.Single(w=>w.Text=="计步").Priority==2,"confirmed bomb skill was demoted by a hidden marker");
+Check(bombWords.OrderByDescending(w=>w.Priority).Select(w=>w.Text).SequenceEqual(new[]{"近","计步","计数"}),"shield/bomb/uninterruptible order wrong");
+Console.WriteLine("PASS: confirmed bomb interruptibility survives hidden markers and stays below shields.");
