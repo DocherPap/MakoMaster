@@ -111,7 +111,7 @@ Check(tiers.OrderByDescending(w=>w.Priority).ThenBy(w=>w.DistanceSquared).Select
 var tierMachine = new TrialMachine(dictionary,0,new Random(1),true,timing);
 tierMachine.Tick(new(true,"",tiers,new Dictionary<int,string>()),0);
 Check(tierMachine.Target=="计步","green barrier did not outrank all casts");
-Check(new TimingSettings() == new TimingSettings(30,80,500,1200),"new default timing ranges");
+Check(new TimingSettings() == new TimingSettings(30,100,800,1600),"new default timing ranges");
 Check(new TimingSettings(10,30,100,200).ValidationError==null,"valid short key timing rejected");
 
 // Count a whole result once, never count individual waves or loading, exit the last result before stopping.

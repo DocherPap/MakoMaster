@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace MakoMaster;
 
-internal sealed record TimingSettings(int KeyMinMs = 30, int KeyMaxMs = 80,
-    int WordMinMs = 500, int WordMaxMs = 1200)
+internal sealed record TimingSettings(int KeyMinMs = 30, int KeyMaxMs = 100,
+    int WordMinMs = 800, int WordMaxMs = 1600)
 {
     internal string? ValidationError => KeyMinMs < 10 || KeyMaxMs > 2000 || KeyMinMs > KeyMaxMs
         ? "按键范围应为 10～2000 毫秒，最小值不能大于最大值。"
