@@ -22,7 +22,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("魔光键影宝箱");
         ImGui.BeginDisabled(OpeningChests || trial != null);
         ImGui.SetNextItemWidth(100); ImGui.InputInt("开启数量", ref chestCount, 0, 0);
-        ImGui.SameLine(); ImGui.TextUnformatted("0 = 开到没有");
+        ImGui.SameLine(); ImGui.TextUnformatted("0=一直开");
         if (ImGui.Button("开始开箱")) OnCommand("", "open-chests");
         ImGui.EndDisabled();
         if (OpeningChests)
@@ -38,7 +38,7 @@ public sealed partial class Plugin
     {
         if (trial != null) { chestMessage = "请先停止自动打字或循环，再开启宝箱。"; return; }
         if (OpeningChests) return;
-        if (chestCount < 0) { chestMessage = "开启数量不能小于 0；填 0 表示开到没有。"; return; }
+        if (chestCount < 0) { chestMessage = "开启数量不能小于 0；填 0 表示一直开。"; return; }
         if (chestItemId == 0)
         {
             var sheet = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();

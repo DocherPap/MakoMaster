@@ -3,7 +3,7 @@
     "Author": "DocherPap",
     "Name": "MakoMaster",
     "InternalName": "MakoMaster",
-    "AssemblyVersion": "1.0.1.0",
+    "AssemblyVersion": "1.0.2.0",
     "Description": "魔光键影自动输入与有限次数循环。启动时尝试切换中文输入法，运行中维护小游戏输入框焦点，停止后解除；护盾与读条优先，危险技能暂停，文件保存默认关闭。",
     "Punchline": "魔光键影自动输入与循环游玩",
     "ApplicableVersion": "any",
@@ -11,12 +11,12 @@
     "LoadRequiredState": 0,
     "LoadSync": false,
     "CanUnloadAsync": false,
-    "Changelog": "1.0.1：保留所有按键及词间间隔，技能和屏障不再跳过停顿；全场按屏障、可打断、不可打断、普通词排序，距离只在同级内比较。",
-    "IsTestingExclusive": false,
+    "Changelog": "1.0.2：宝箱数量提示调整为“0=一直开”。",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.2.0.zip",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.2.0.zip",
     "RepoUrl": "https://github.com/DocherPap/MakoMaster",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
-    "IsHide": false,
-    "LastUpdate": 1793241360
+    "LastUpdate": 1793242765,
+    "IsTestingExclusive": false,
+    "IsHide": false
   }
 ]
