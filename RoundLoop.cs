@@ -1,5 +1,25 @@
 namespace MakoMaster;
 
+internal enum RunMode { Solo, Leader, Member, Chests }
+internal static class RunModePolicy
+{
+    internal static TimingSettings Preset(RunMode mode) => mode is RunMode.Leader or RunMode.Member ? TimingSettings.FastPreset : new();
+    internal static string? PartyError(RunMode mode, PartyLoopRole role) => mode switch
+    {
+        RunMode.Leader or RunMode.Member when role == PartyLoopRole.Disabled => "组队模式需要 4 人小队。",
+        RunMode.Leader or RunMode.Member when role == PartyLoopRole.Waiting => "等待确认小队成员及队长身份。",
+        RunMode.Leader when role != PartyLoopRole.Leader => "当前不是队长，请选择组队队员模式。",
+        RunMode.Member when role != PartyLoopRole.Member => "当前是队长，请选择组队队长模式。",
+        _ => null,
+    };
+    internal static bool CanInitiate(RunMode mode) => mode is RunMode.Solo or RunMode.Leader;
+    internal static int Rounds(RunMode mode, int solo, int leader)
+    {
+        var count = mode == RunMode.Solo ? solo : mode == RunMode.Leader ? leader : 0;
+        return count is >= 0 and <= 9999 ? count : throw new InvalidDataException("排本次数应为 0～9999，0 表示持续运行。");
+    }
+}
+
 internal enum PartyLoopRole { Disabled, Waiting, Leader, Member }
 internal static class PartyLoopPolicy
 {

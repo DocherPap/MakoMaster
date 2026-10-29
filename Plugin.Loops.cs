@@ -18,7 +18,6 @@ public sealed partial class Plugin
     private readonly IClientState clientState;
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IPartyList partyList;
-    private bool partyLoopActive;
     private unsafe PartyLoopRole ReadPartyLoopRole()
     {
         // Cross-world parties are not represented by IPartyList outside an instance.
@@ -54,7 +53,6 @@ public sealed partial class Plugin
         var leader = leaderIndex >= 0 && leaderIndex < partyList.Length ? partyList[leaderIndex] : null;
         return PartyLoopPolicy.Resolve(partyList.Length, partyList.IsAlliance, leader?.EntityId, objects.LocalPlayer?.EntityId);
     }
-    private bool loopEnabled;
     private RoundLoop? roundLoop;
     private uint? loopTerritory;
     private uint loopNpcDataId;
@@ -143,17 +141,15 @@ public sealed partial class Plugin
             lastLoopScene = sceneSignature;
             WriteRecord(new { Kind = "LoopScene", At = DateTimeOffset.Now, Scene = scene, HomeTerritory = loopTerritory, View = view });
         }
-        var partyRole = partyLoopActive ? ReadPartyLoopRole() : PartyLoopRole.Leader;
-        // Party data can disappear during loading or inside the solo game instance.
-        if (partyLoopActive && !loading && view.Home && !view.Results && partyRole == PartyLoopRole.Disabled)
+        // Validate in the lobby: party data may be absent in loading and game instances.
+        if (!loading && view.Home && !view.Game && !view.Results && !view.Confirm
+            && (roundLoop.Unlimited || roundLoop.Completed < roundLoop.Limit))
         {
-            loopEnabled = false;
-            partyLoopActive = false;
-            partyRole = PartyLoopRole.Leader;
-            chat.Print("[MakoMaster] 当前不是 4 人小队，已关闭小队循环判断，继续运行至手动停止。");
+            var error = RunModePolicy.PartyError(activeMode, ReadPartyLoopRole());
+            if (error != null) { loopMessage = error + " 恢复小队状态后继续，或点击停止更换模式。"; return true; }
         }
         var oldCompleted = roundLoop.Completed;
-        var action = roundLoop.Tick(view, now, canInitiate: partyRole == PartyLoopRole.Leader);
+        var action = roundLoop.Tick(view, now, canInitiate: RunModePolicy.CanInitiate(activeMode));
         if (oldCompleted != roundLoop.Completed)
             WriteRecord(new { Kind = "RoundCompleted", At = DateTimeOffset.Now, roundLoop.Completed, roundLoop.Limit });
         if (action == RoundAction.Finish)

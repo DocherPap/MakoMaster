@@ -414,3 +414,34 @@ foreach (var initiates in new[] { true, false })
     }
 }
 Console.WriteLine("PASS: unlimited solo/leader/follower play continues across results without finishing.");
+
+Check(RunModePolicy.Preset(RunMode.Solo)==new TimingSettings(),"solo uses default preset");
+Check(RunModePolicy.Preset(RunMode.Leader)==TimingSettings.FastPreset,"leader uses fast preset");
+Check(RunModePolicy.Preset(RunMode.Member)==TimingSettings.FastPreset,"member uses fast preset");
+Check(RunModePolicy.Rounds(RunMode.Solo,3,7)==3 && RunModePolicy.Rounds(RunMode.Leader,3,7)==7 && RunModePolicy.Rounds(RunMode.Member,3,7)==0,"mode count routing");
+Check(RunModePolicy.Rounds(RunMode.Solo,0,1)==0,"zero keeps unlimited support");
+Check(RunModePolicy.CanInitiate(RunMode.Solo) && RunModePolicy.CanInitiate(RunMode.Leader) && !RunModePolicy.CanInitiate(RunMode.Member),"mode NPC and registration permissions");
+Check(RunModePolicy.PartyError(RunMode.Solo,PartyLoopRole.Disabled)==null,"solo needs no party");
+foreach(var mode in new[]{RunMode.Leader,RunMode.Member})
+{
+ Check(RunModePolicy.PartyError(mode,PartyLoopRole.Disabled)!=null,"party size rejection");
+ Check(RunModePolicy.PartyError(mode,PartyLoopRole.Waiting)!=null,"unknown party cannot register");
+}
+Check(RunModePolicy.PartyError(RunMode.Leader,PartyLoopRole.Member)!=null,"nonleader cannot use leader mode");
+Check(RunModePolicy.PartyError(RunMode.Member,PartyLoopRole.Leader)!=null,"leader cannot use member mode");
+Check(RunModePolicy.PartyError(RunMode.Leader,PartyLoopPolicy.ResolveCrossRealm(4,false,true))==null,"cross-world leader mode");
+Check(RunModePolicy.PartyError(RunMode.Member,PartyLoopPolicy.ResolveCrossRealm(4,false,false))==null,"cross-world member mode");
+foreach(var mode in new[]{RunMode.Solo,RunMode.Leader})
+{
+ var finiteMode=new RoundLoop(RunModePolicy.Rounds(mode,2,2),true);
+ for(int n=0;n<2;n++)
+ {
+  long t=20000+n*20000;
+  finiteMode.Tick(game,t,RunModePolicy.CanInitiate(mode));
+  Check(finiteMode.Tick(result,t+1000)==RoundAction.Exit,"mode result exit");
+  finiteMode.ActionSent(RoundAction.Exit,t+1000);
+  finiteMode.Tick(home,t+4000);
+  Check(finiteMode.Tick(home,t+6000)==(n==1?RoundAction.Finish:RoundAction.Interact),"mode finite restart/stop");
+ }
+}
+Console.WriteLine("PASS: four modes, timing presets, independent counts, party role validation and finite round completion.");

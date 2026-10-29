@@ -12,29 +12,25 @@ Add this URL under **Custom Plugin Repositories** in Dalamud settings. Save, ref
 https://raw.githubusercontent.com/DocherPap/MakoMaster/main/repo.json
 ```
 
-## Start and stop
+## Usage
 
-1. Enter `/makomaster` to open the control window.
-2. Stand near the entry NPC, or enter an ongoing minigame, then click **Start (开始)**.
-3. **Start (开始)** keeps running: register, type, exit results, and start the next game until you click Stop. Starting during a game resumes the current game.
-4. Click **Stop (停止)** to end operation and release input-field focus maintenance. F8 and Esc do not stop the plugin.
+Enter `/makomaster`, select one of the four radio-button modes, then click **Start (开始)**. **Stop (停止)** ends operation and releases input-field focus maintenance.
 
-## Repeat play
+| Mode | Preset when selected | Behavior |
+| --- | --- | --- |
+| Solo (单人排本) | Default | Select the NPC, register, accept departure, type, and exit results. Stop after the adjacent game count. |
+| Party leader (组队队长) | Fast | Requires a four-person party and leadership. Register, accept departure, type, and exit results. Stop after the requested game count. |
+| Party member (组队队员) | Fast | Requires a four-person party and non-leader status. Wait for the leader, accept departure, type, and exit results until stopped manually. |
+| Open chests (开启宝箱) | Not applicable | Open the adjacent number of chests, stopping earlier if inventory runs out. |
 
-Check **Repeat play (循环开局)** to enable four-person party handling, including cross-world parties. The leader registers with the entry NPC; other members wait for the leader and accept departure. Everyone types and exits results automatically, then continues to the next game until **Stop (停止)** is clicked. Outside a four-person party, party handling turns off and normal automatic play continues.
-
-One results screen counts as one game; individual waves do not. Move closer if the NPC is out of reach. The plugin does not move your character.
-
-## Open chests
-
-Stop automatic typing or repeat play first. In the **魔光键影宝箱** section, enter a quantity:
-
-- **Greater than 0:** open that many chests, or stop when your supply runs out.
-- **0:** continue until no matching chests remain in your regular inventory bags.
-
-Click **Start opening (开始开箱)**. Click **Stop opening (停止开箱)** or the main **Stop (停止)** button to end the operation.
+- Game counts accept **0–9999**; **0** keeps running until stopped manually. A chest count of **0** opens until no matching chests remain in regular inventory bags.
+- Normal and cross-world parties are supported. Party modes refuse to start with an invalid size or role. If these change during play, automation waits for recovery upon returning to the entry area.
+- One results screen counts as one game; individual waves do not. Starting during a game resumes the current game.
+- Move closer if the NPC is out of reach; the plugin does not move your character. Stop before changing modes or counts.
 
 ## Advanced settings
+
+**Chat output (聊天框输出)** is enabled by default. Uncheck it to silence all plugin chat messages, including errors.
 
 Expand **Advanced settings (高级设置)** to change the random delays. Stop automatic typing before editing them.
 
@@ -45,7 +41,7 @@ Expand **Advanced settings (高级设置)** to change the random delays. Stop au
 
 **预设：迪迦** applies the minimum allowed delays. IME response waits and dangerous-skill pauses still apply.
 
-Click **Restore defaults (恢复默认间隔)** or **Preset: Fast (预设：快速)** to apply a preset. Click **Save settings (保存设置)** to keep the values for future use.
+Click **Restore defaults (预设：默认)** or **Preset: Fast (预设：快速)** to apply a preset. Click **Save settings (保存设置)** to keep the values for future use.
 
 **Save logs (保存日志)** is off by default and resets to off whenever the plugin reloads. Enable it to keep logs and newly learned vocabulary. Click **Disable logs (关闭日志)** to stop saving. While saving is disabled, newly learned entries remain available only for the current plugin session.
 

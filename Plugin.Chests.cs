@@ -18,19 +18,8 @@ public sealed partial class Plugin
 
     private void DrawChestControls()
     {
-        ImGui.Separator();
-        ImGui.TextUnformatted("魔光键影宝箱");
-        ImGui.BeginDisabled(OpeningChests || trial != null);
-        ImGui.SetNextItemWidth(100); ImGui.InputInt("开启数量", ref chestCount, 0, 0);
-        ImGui.SameLine(); ImGui.TextUnformatted("0=一直开");
-        if (ImGui.Button("开始开箱")) OnCommand("", "open-chests");
-        ImGui.EndDisabled();
         if (OpeningChests)
-        {
-            ImGui.SameLine();
-            if (ImGui.Button("停止开箱")) OnCommand("", "stop-chests");
             ImGui.TextUnformatted($"已开启 {chestOpening!.Opened} 个 · 背包剩余 {chestOpening.Remaining} 个");
-        }
         var message = chestOpening?.Status ?? chestMessage;
         if (message.Length > 0) ImGui.TextWrapped(message);
     }

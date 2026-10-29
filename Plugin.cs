@@ -42,6 +42,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly WordResolver wordResolver = new();
     private readonly Queue<object> captureBacklog = new();
     private bool saveLogs;
+    private bool chatOutputEnabled = true;
     private string TimingFile => Path.Combine(pi.AssemblyLocation.DirectoryName!, "timing-settings.json");
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
@@ -64,15 +65,25 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { timingMessage = "读取设置失败，暂用默认值。"; log.Error(ex, "MakoMaster timing settings load failed"); }
         try { vocabulary = new VocabularyStore(pi.AssemblyLocation.DirectoryName!); }
         catch (Exception ex) { log.Error(ex, "MakoMaster vocabulary load failed; existing files preserved"); }
+        SelectRunMode(RunMode.Solo);
         commands.AddHandler("/makomaster", new CommandInfo(OnCommand)
         {
-            HelpMessage = "打开控制窗口；ui：显示窗口；auto：连续输入；test：单题；start：采集；status/list/find/dump。使用窗口停止按钮，不注册 F8/Esc 停止键。",
+            HelpMessage = "打开控制窗口；ui：显示窗口；auto：连续输入；test：单题；start：采集；status/list/find/dump。使用窗口停止按钮。",
         });
         pi.UiBuilder.DisableAutomaticUiHide = true;
         pi.UiBuilder.Draw += DrawControlWindow;
         pi.UiBuilder.OpenMainUi += ShowControlWindow;
         pi.UiBuilder.OpenConfigUi += ShowControlWindow;
         framework.Update += OnUpdate;
+    }
+
+    private void PrintChat(string message)
+    {
+        if (chatOutputEnabled) chat.Print(message);
+    }
+    private void PrintChatError(string message)
+    {
+        if (chatOutputEnabled) chat.PrintError(message);
     }
 
     private void ShowControlWindow() => showControlWindow = true;
@@ -87,13 +98,14 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             if (!draw) return;
-            ImGui.TextUnformatted(trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
+            ImGui.TextUnformatted(OpeningChests ? "正在开箱" : trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
             if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
             if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
             if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2.5 秒暂停");
             if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
             if (inputEnvironmentMessage.Length > 0) ImGui.TextWrapped(inputEnvironmentMessage);
             ImGui.Separator();
+            DrawModeControls();
             if (ImGui.CollapsingHeader("高级设置"))
             {
                 ImGui.BeginDisabled(trial != null);
@@ -113,32 +125,24 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
                 if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
                 if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
-                if (ImGui.Button("恢复默认间隔")) ApplyTimingPreset(new TimingSettings());
+                if (ImGui.Button("预设：默认")) ApplyTimingPreset(new TimingSettings());
                 ImGui.SameLine();
                 if (ImGui.Button("预设：快速")) ApplyTimingPreset(TimingSettings.FastPreset);
+                ImGui.SameLine();
                 if (ImGui.Button("预设：迪迦")) ApplyTimingPreset(TimingSettings.DigaPreset);
                 ImGui.EndDisabled();
-                if (ImGui.Button(saveLogs ? "关闭日志" : "保存日志")) OnCommand("", "toggle-logs");
-                ImGui.SameLine(); ImGui.TextUnformatted(saveLogs ? "已开启" : "已关闭");
+                ImGui.Checkbox("聊天框输出", ref chatOutputEnabled);
+                var logSavingChecked = saveLogs;
+                if (ImGui.Checkbox("保存日志", ref logSavingChecked)) OnCommand("", "toggle-logs");
             }
-            ImGui.BeginDisabled(trial != null);
-            ImGui.Checkbox("循环开局", ref loopEnabled);
-            ImGui.TextWrapped("开始后持续运行，结算后继续，点击停止结束。");
-            if (loopEnabled)
-            {
-                ImGui.TextWrapped("仅限 4 人小队：队长自动报名，队员等待开局；每次成绩结算计为一局。");
-            }
-            ImGui.EndDisabled();
-            ImGui.Separator();
             ImGui.BeginDisabled(trial != null || OpeningChests);
-            if (ImGui.Button("开始", new Vector2(135, 36))) OnCommand("", loopEnabled ? "loop" : "auto");
+            if (ImGui.Button("开始", new Vector2(135, 36))) OnCommand("", "run-mode");
             ImGui.EndDisabled(); ImGui.SameLine();
             ImGui.BeginDisabled(trial == null && capture == null && !OpeningChests);
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.65f, 0.16f, 0.16f, 1));
             if (ImGui.Button("停止", new Vector2(135, 36))) OnCommand("", "stop");
             ImGui.PopStyleColor();
             ImGui.EndDisabled();
-            DrawChestControls();
             if (trial == null && capture == null && !OpeningChests && ImGui.Button("隐藏窗口")) showControlWindow = false;
         }
         finally { ImGui.End(); }
@@ -169,7 +173,7 @@ public sealed partial class Plugin : IDalamudPlugin
             catch (Exception ex)
             {
                 lastRunResult = "操作失败：" + ex.Message;
-                log.Error(ex, "MakoMaster command failed"); chat.PrintError("[MakoMaster] " + lastRunResult);
+                log.Error(ex, "MakoMaster command failed"); PrintChatError("[MakoMaster] " + lastRunResult);
             }
         });
     }
@@ -182,22 +186,28 @@ public sealed partial class Plugin : IDalamudPlugin
         if (split[0] == "stop-chests") { StopChestOpening("手动停止开箱"); return; }
         if (split[0] == "toggle-logs") { SetLogSaving(!saveLogs); return; }
         if (split[0] == "save-timing") { if (trial == null) SaveTimingSettings(); return; }
+        if (split[0] == "run-mode")
+        {
+            if (trial != null || OpeningChests) return;
+            if (selectedMode == RunMode.Chests) { StartChestOpening(); return; }
+            split[0] = "auto";
+        }
         if (split[0] is "test" or "auto" or "loop")
         {
-            if (trial != null) { ShowControlWindow(); chat.Print("[MakoMaster] 已等待或正在输入，请使用控制窗口的停止按钮。"); return; }
+            if (trial != null) { ShowControlWindow(); PrintChat("[MakoMaster] 已等待或正在输入，请使用控制窗口的停止按钮。"); return; }
             if (OpeningChests) { chestMessage = "请先停止开箱，再启动自动打字或循环。"; return; }
             SaveTimingSettings(saveLogs);
             var dictionary = vocabulary?.EffectiveDictionary ?? throw new InvalidDataException("词库未能加载，详见卫月日志");
             if (dictionary.Count == 0) throw new InvalidDataException("词库为空");
-            partyLoopActive = false;
-            if (split[0] == "loop" && ReadPartyLoopRole() == PartyLoopRole.Disabled)
+            activeMode = selectedMode;
+            if (split[0] != "test")
             {
-                loopEnabled = false;
-                split[0] = "auto";
-                chat.Print("[MakoMaster] 当前不是 4 人小队，已关闭循环，按普通开始处理。");
+                if (activeMode == RunMode.Chests) { StartChestOpening(); return; }
+                var error = RunModePolicy.PartyError(activeMode, ReadPartyLoopRole());
+                if (error != null) throw new InvalidDataException(error);
+                PrepareLoop(RunModePolicy.Rounds(activeMode, soloRounds, leaderRounds), exitExistingResult: true);
+                if (activeMode == RunMode.Member) loopMessage = "队员模式：等待队长开始游戏。";
             }
-            if (split[0] == "loop") { PrepareLoop(exitExistingResult: true); partyLoopActive = true; }
-            else if (split[0] == "auto") PrepareLoop(exitExistingResult: true);
             else roundLoop = null;
             if (saveLogs && capture == null) Execute("start 180");
             continuousMode = split[0] != "test";
@@ -216,17 +226,17 @@ public sealed partial class Plugin : IDalamudPlugin
                 TimingSettings = timingSettings,
                 LoopCount = roundLoop?.Limit, Npc = loopNpcName, NpcDataId = loopNpcDataId,
                 Priority = "green barrier > confirmed interruptible cast > other cast > normal; distance within tier", AnchorX = 0.5, AnchorY = 1.0 });
-            chat.Print($"[MakoMaster] 词库 {dictionary.Count} 条。{(continuousMode ? "连续模式" : "一题试打")}已待命，三秒后开始检查；使用控制窗口按钮停止，F8/Esc 不再中断插件。");
+            PrintChat($"[MakoMaster] 词库 {dictionary.Count} 条。{(continuousMode ? "连续模式" : "一题试打")}已待命，三秒后开始检查；使用控制窗口按钮停止。");
             return;
         }
         if (split[0] == "off") { StopTrial("手动停止"); return; }
         if (split[0] == "start")
         {
-            if (!saveLogs) { chat.Print("[MakoMaster] 请先在高级设置中点击“保存日志”。"); return; }
-            if (capture != null) { chat.Print("[MakoMaster] 正在采集。先 stop 可保存并结束本次采集。"); return; }
+            if (!saveLogs) { PrintChat("[MakoMaster] 请先在高级设置中点击“保存日志”。"); return; }
+            if (capture != null) { PrintChat("[MakoMaster] 正在采集。先 stop 可保存并结束本次采集。"); return; }
             var seconds = 180;
             if (split.Length > 1 && (!int.TryParse(split[1], out seconds) || seconds < 10 || seconds > 600))
-            { chat.PrintError("[MakoMaster] 采集时间应为 10～600 秒。"); return; }
+            { PrintChatError("[MakoMaster] 采集时间应为 10～600 秒。"); return; }
             saveLogs = true;
             if (vocabulary != null) vocabulary.PersistenceEnabled = true;
             var sessionFolder = Path.Combine(pi.AssemblyLocation.DirectoryName!, "captures");
@@ -238,29 +248,29 @@ public sealed partial class Plugin : IDalamudPlugin
             if (!WriteRecord(new { Kind = "Start", Version = typeof(Plugin).Assembly.GetName().Version?.ToString(), At = DateTimeOffset.Now,
                 SampleIntervalMs = 250, DurationSeconds = seconds, DalamudAssembly = typeof(IDalamudPlugin).Assembly.GetName().Version?.ToString() }))
             { StopCapture("无法写入文件"); return; }
-            chat.Print($"[MakoMaster] 后台采集已开始，{seconds} 秒后自动结束。现在关闭聊天框并进入小游戏，正常打几道题即可。");
-            chat.Print("[MakoMaster] 文件：" + lastCapture);
+            PrintChat($"[MakoMaster] 后台采集已开始，{seconds} 秒后自动结束。现在关闭聊天框并进入小游戏，正常打几道题即可。");
+            PrintChat("[MakoMaster] 文件：" + lastCapture);
             return;
         }
         if (split[0] == "stop") { StopChestOpening("手动停止"); StopTrial("手动停止"); SetLogSaving(false); return; }
         if (split[0] == "status")
         {
-            if (vocabulary != null) chat.Print($"[MakoMaster] 已记录 {vocabulary.SeenCount} 种题目，新增学习 {vocabulary.LearnedCount} 条；可用词库 {vocabulary.EffectiveDictionary.Count} 条。");
-            if (trial != null) chat.Print($"[MakoMaster] {(continuousMode ? "连续模式" : "单题模式")}，已完成 {trial.CompletedCount} 题；" + trial.Result);
-            chat.Print(capture == null ? "[MakoMaster] 未在采集。最近文件：" + lastCapture
+            if (vocabulary != null) PrintChat($"[MakoMaster] 已记录 {vocabulary.SeenCount} 种题目，新增学习 {vocabulary.LearnedCount} 条；可用词库 {vocabulary.EffectiveDictionary.Count} 条。");
+            if (trial != null) PrintChat($"[MakoMaster] {(continuousMode ? "连续模式" : "单题模式")}，已完成 {trial.CompletedCount} 题；" + trial.Result);
+            PrintChat(capture == null ? "[MakoMaster] 未在采集。最近文件：" + lastCapture
                 : $"[MakoMaster] 采集中，{(captureUntil == long.MaxValue ? "持续至停止" : $"剩余 {Math.Max(0, (captureUntil - Environment.TickCount64) / 1000)} 秒")}；已入队 {capture.Frames} 条记录。文件：{lastCapture}");
             return;
         }
         var manager = RaptureAtkUnitManager.Instance();
-        if (manager == null) { chat.PrintError("[MakoMaster] 游戏 UI 未就绪。"); return; }
+        if (manager == null) { PrintChatError("[MakoMaster] 游戏 UI 未就绪。"); return; }
         var results = new List<AddonSnapshot>();
         var names = new List<string>();
         var list = &manager->AllLoadedUnitsList;
         var query = split.Length > 1 ? split[1] : "";
         if (split[0] != "list" && split[0] != "find" && split[0] != "dump")
-        { chat.PrintError("[MakoMaster] 使用 list、find 或 dump。"); return; }
+        { PrintChatError("[MakoMaster] 使用 list、find 或 dump。"); return; }
         if (split[0] != "list" && query.Length == 0)
-        { chat.PrintError("[MakoMaster] 请提供题目片段或窗口名。"); return; }
+        { PrintChatError("[MakoMaster] 请提供题目片段或窗口名。"); return; }
         for (var i = 0; i < Math.Min((int)list->Count, list->Entries.Length); i++)
         {
             var addon = list->Entries[i].Value;
@@ -285,12 +295,12 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         if (split[0] == "list")
         {
-            foreach (var name in names.Distinct().Order()) chat.Print("[MakoMaster] " + name);
+            foreach (var name in names.Distinct().Order()) PrintChat("[MakoMaster] " + name);
             return;
         }
         if (results.Count == 0)
-        { chat.Print("[MakoMaster] 未找到匹配。尝试较短片段，或用 list 查窗口名后 dump。"); return; }
-        if (!saveLogs) { chat.Print("[MakoMaster] 请先在高级设置中点击“保存日志”，再导出诊断文件。"); return; }
+        { PrintChat("[MakoMaster] 未找到匹配。尝试较短片段，或用 list 查窗口名后 dump。"); return; }
+        if (!saveLogs) { PrintChat("[MakoMaster] 请先在高级设置中点击“保存日志”，再导出诊断文件。"); return; }
         var folder = Path.Combine(pi.GetPluginConfigDirectory(), "captures");
         Directory.CreateDirectory(folder);
         var file = Path.Combine(folder, $"capture-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}.json");
@@ -300,8 +310,8 @@ public sealed partial class Plugin : IDalamudPlugin
             DalamudAssembly = typeof(IDalamudPlugin).Assembly.GetName().Version?.ToString(),
             Addons = results,
         }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), Encoding.UTF8);
-        foreach (var result in results) chat.Print($"[MakoMaster] {result.Name}: {result.Nodes.Count} 个文字节点，{result.Values.Count} 个窗口值。");
-        chat.Print("[MakoMaster] 导出文件：" + file);
+        foreach (var result in results) PrintChat($"[MakoMaster] {result.Name}: {result.Nodes.Count} 个文字节点，{result.Values.Count} 个窗口值。");
+        PrintChat("[MakoMaster] 导出文件：" + file);
         log.Information("MakoMaster capture: {Path}", file);
     }
 
@@ -426,7 +436,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             log.Error(ex, "MakoMaster vocabulary persistence failed; input stopped and learning disabled");
             vocabulary = null;
-            chat.PrintError("[MakoMaster] 词库记录失败，本次加载已停用学习；请检查文件或卫月日志。");
+            PrintChatError("[MakoMaster] 词库记录失败，本次加载已停用学习；请检查文件或卫月日志。");
         }
     }
 
@@ -518,7 +528,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     NativeInputFlag = input?.Values.FirstOrDefault(v => v.Index == 2)?.Text,
                     VisibleWordCount = targets.Count }))
                 { PauseInput("等待日志写盘", now); return; }
-                if (!trial.HasEnteredGame) chat.Print("[MakoMaster] " + message + "；控制窗口可停止。");
+                if (!trial.HasEnteredGame) PrintChat("[MakoMaster] " + message + "；控制窗口可停止。");
             }
         }
         if (!trial.Started && blockReason.Length > 0)
@@ -578,14 +588,14 @@ public sealed partial class Plugin : IDalamudPlugin
         capture?.TryWrite(new { Kind = "TrialEnd", At = DateTimeOffset.Now, Target = target,
             Continuous = wasContinuous, CompletedCount = completed, Reason = reason });
         if (wasContinuous && capture != null) captureUntil = Environment.TickCount64;
-        if (!disposed) chat.Print($"[MakoMaster] 自动输入已停止，已完成 {completed} 题：" + reason);
+        if (!disposed) PrintChat($"[MakoMaster] 自动输入已停止，已完成 {completed} 题：" + reason);
     }
 
     private void StopCapture(string reason, bool stopInput = true)
     {
         if (stopInput) StopTrial("后台采集停止：" + reason);
         var session = capture;
-        if (session == null) { if (!disposed) chat.Print("[MakoMaster] 当前未在采集。"); return; }
+        if (session == null) { if (!disposed) PrintChat("[MakoMaster] 当前未在采集。"); return; }
         capture = null;
         previous.Clear();
         var pending = captureBacklog.ToArray();
@@ -593,8 +603,8 @@ public sealed partial class Plugin : IDalamudPlugin
         _ = FinalizeCapture(session, pending, reason);
         if (!disposed)
         {
-            chat.Print("[MakoMaster] " + reason + "。记录已停止，后台正在完成文件写入。");
-            chat.Print("[MakoMaster] 文件：" + session.FilePath);
+            PrintChat("[MakoMaster] " + reason + "。记录已停止，后台正在完成文件写入。");
+            PrintChat("[MakoMaster] 文件：" + session.FilePath);
         }
     }
 
@@ -615,8 +625,8 @@ public sealed partial class Plugin : IDalamudPlugin
         await framework.RunOnFrameworkThread(() =>
         {
             if (disposed) return;
-            if (session.Error == null) chat.Print("[MakoMaster] 文件已保存，可以发送：" + session.FilePath);
-            else { log.Error(session.Error, "MakoMaster capture incomplete"); chat.PrintError("[MakoMaster] 文件写入失败，数据可能不完整。"); }
+            if (session.Error == null) PrintChat("[MakoMaster] 文件已保存，可以发送：" + session.FilePath);
+            else { log.Error(session.Error, "MakoMaster capture incomplete"); PrintChatError("[MakoMaster] 文件写入失败，数据可能不完整。"); }
         });
     }
 
