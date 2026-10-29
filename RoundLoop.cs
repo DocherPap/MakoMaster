@@ -1,5 +1,16 @@
 namespace MakoMaster;
 
+internal enum PartyLoopRole { Disabled, Waiting, Leader, Member }
+internal static class PartyLoopPolicy
+{
+    internal static PartyLoopRole Resolve(int count, bool alliance, uint? leaderId, uint? playerId)
+    {
+        if (count != 4 || alliance) return PartyLoopRole.Disabled;
+        if (leaderId is null or 0 or uint.MaxValue || playerId is null or 0 or uint.MaxValue) return PartyLoopRole.Waiting;
+        return leaderId == playerId ? PartyLoopRole.Leader : PartyLoopRole.Member;
+    }
+}
+
 internal enum RoundAction { None, Interact, Apply, Accept, Exit, Finish }
 internal sealed record RoundView(bool Home, bool Loading, bool Game, bool Entry, bool Confirm, bool Results);
 
@@ -24,7 +35,7 @@ internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
     private long nextAction, homeSince;
     private string sentScreen = "";
 
-    internal RoundAction Tick(RoundView view, long now)
+    internal RoundAction Tick(RoundView view, long now, bool canInitiate = true)
     {
         if (view.Game && !leaving) played = true;
         if (view.Results)
@@ -48,6 +59,11 @@ internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
             played = leaving = registered = false; sentScreen = ""; homeSince = 0;
         }
         if (view.Game) { sentScreen = ""; Status = $"自动打字：第 {Completed + 1}/{Limit} 局"; return RoundAction.None; }
+        if (!canInitiate && !view.Confirm)
+        {
+            Status = "队员模式：等待队长开始游戏";
+            return RoundAction.None;
+        }
         var screen = view.Confirm ? "confirm" : view.Entry ? "entry" : "home";
         // Never submit a still-visible registration / departure button twice.
         if (screen != sentScreen && now >= nextAction)

@@ -21,7 +21,7 @@ https://raw.githubusercontent.com/DocherPap/MakoMaster/main/repo.json
 
 ## Repeat play
 
-Check **Repeat play (循环开局)**, enter **1–9999** games in the adjacent box, then click **Start (开始)**. The plugin selects the entry NPC, registers, types, and exits the results automatically. It stops after the requested number of games.
+Check **Repeat play (循环开局)**, enter **1–9999** games in the adjacent box, then click **Start (开始)**. Requires a four-person party: the leader selects the NPC and registers; other members wait for the leader and accept departure automatically. Everyone types and exits results automatically, stopping after the requested number of games. Outside a four-person party, repeat play turns off and Start uses its normal behavior. If party size changes, repeat play stops when you return to the entry area.
 
 One results screen counts as one game; individual waves do not. Move closer if the NPC is out of reach. The plugin does not move your character.
 

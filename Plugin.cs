@@ -46,13 +46,14 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
         IChatGui chat, IFramework framework, IPluginLog log, IObjectTable objects,
-        ITargetManager targets, IClientState clientState, IAddonLifecycle addonLifecycle, IDataManager dataManager)
+        ITargetManager targets, IClientState clientState, IAddonLifecycle addonLifecycle, IDataManager dataManager, IPartyList partyList)
     {
         this.pi = pi; this.commands = commands; this.chat = chat;
         this.framework = framework; this.log = log;
         this.objects = objects; this.targetManager = targets; this.clientState = clientState;
         this.addonLifecycle = addonLifecycle;
         this.dataManager = dataManager;
+        this.partyList = partyList;
         InitializeDiagnostics();
         try
         {
@@ -127,7 +128,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.SameLine(); ImGui.TextUnformatted("次后停止");
             if (loopEnabled)
             {
-                ImGui.TextWrapped("自动选择入场 NPC，靠近后自动开始；每次成绩结算计为一局。");
+                ImGui.TextWrapped("仅限 4 人小队：队长自动报名，队员等待开局；每次成绩结算计为一局。");
             }
             ImGui.EndDisabled();
             ImGui.Separator();
@@ -190,7 +191,14 @@ public sealed partial class Plugin : IDalamudPlugin
             SaveTimingSettings(saveLogs);
             var dictionary = vocabulary?.EffectiveDictionary ?? throw new InvalidDataException("词库未能加载，详见卫月日志");
             if (dictionary.Count == 0) throw new InvalidDataException("词库为空");
-            if (split[0] == "loop") PrepareLoop();
+            partyLoopActive = false;
+            if (split[0] == "loop" && ReadPartyLoopRole() == PartyLoopRole.Disabled)
+            {
+                loopEnabled = false;
+                split[0] = "auto";
+                chat.Print("[MakoMaster] 当前不是 4 人小队，已关闭循环，按普通开始处理。");
+            }
+            if (split[0] == "loop") { PrepareLoop(); partyLoopActive = true; }
             else if (split[0] == "auto" && !IsMinigameInProgress()) PrepareLoop(1, exitExistingResult: true);
             else roundLoop = null;
             if (saveLogs && capture == null) Execute("start 180");

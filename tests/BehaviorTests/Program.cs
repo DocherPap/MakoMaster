@@ -360,3 +360,26 @@ Check(singleStart.Tick(priorResult,15000)==RoundAction.Exit && singleStart.Compl
 singleStart.Tick(entryHome,17500);
 Check(singleStart.Tick(entryHome,19500)==RoundAction.Finish,"single start began a second game");
 Console.WriteLine("PASS: fast preset is half of defaults; non-loop start can clear a prior result, register, finish exactly one game, exit and stop.");
+
+Check(PartyLoopPolicy.Resolve(1,false,1,1)==PartyLoopRole.Disabled,"solo disabled");
+Check(PartyLoopPolicy.Resolve(3,false,1,1)==PartyLoopRole.Disabled,"three disabled");
+Check(PartyLoopPolicy.Resolve(4,true,1,1)==PartyLoopRole.Disabled,"alliance disabled");
+Check(PartyLoopPolicy.Resolve(4,false,1,1)==PartyLoopRole.Leader,"leader");
+Check(PartyLoopPolicy.Resolve(4,false,1,2)==PartyLoopRole.Member,"member");
+Check(PartyLoopPolicy.Resolve(4,false,null,2)==PartyLoopRole.Waiting,"unknown leader waits");
+var follower = new RoundLoop(2);
+Check(follower.Tick(home,0,false)==RoundAction.None,"member no interact");
+Check(follower.Tick(home with { Entry=true },1,false)==RoundAction.None,"member no apply");
+Check(follower.Tick(home with { Confirm=true },2,false)==RoundAction.Accept,"member accepts");
+follower.ActionSent(RoundAction.Accept,2);
+follower.Tick(game,3000,false);
+Check(follower.Tick(result,4000,false)==RoundAction.Exit && follower.Completed==1,"member completes");
+follower.ActionSent(RoundAction.Exit,4000);
+follower.Tick(home,6000,false);
+Check(follower.Tick(home,8000,false)==RoundAction.None,"member waits next");
+Check(follower.Tick(home,9000,true)==RoundAction.Interact,"new leader registers");
+follower.Tick(game,10000,false);
+Check(follower.Tick(result,11000,false)==RoundAction.Exit && follower.Completed==2,"second count");
+follower.Tick(home,14000,false);
+Check(follower.Tick(home,16000,false)==RoundAction.Finish,"member finishes limit");
+Console.WriteLine("PASS: party size, leadership, follower waiting/confirmation/results/limit and leader transfer.");

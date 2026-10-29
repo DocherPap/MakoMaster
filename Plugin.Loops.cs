@@ -17,6 +17,14 @@ public sealed partial class Plugin
     private readonly ITargetManager targetManager;
     private readonly IClientState clientState;
     private readonly IAddonLifecycle addonLifecycle;
+    private readonly IPartyList partyList;
+    private bool partyLoopActive;
+    private PartyLoopRole ReadPartyLoopRole()
+    {
+        var leaderIndex = (int)partyList.PartyLeaderIndex;
+        var leader = leaderIndex >= 0 && leaderIndex < partyList.Length ? partyList[leaderIndex] : null;
+        return PartyLoopPolicy.Resolve(partyList.Length, partyList.IsAlliance, leader?.EntityId, objects.LocalPlayer?.EntityId);
+    }
     private bool loopEnabled;
     private int loopCount = 1;
     private RoundLoop? roundLoop;
@@ -107,8 +115,16 @@ public sealed partial class Plugin
             lastLoopScene = sceneSignature;
             WriteRecord(new { Kind = "LoopScene", At = DateTimeOffset.Now, Scene = scene, HomeTerritory = loopTerritory, View = view });
         }
+        var partyRole = partyLoopActive ? ReadPartyLoopRole() : PartyLoopRole.Leader;
+        // Party data can disappear during loading or inside the solo game instance.
+        if (partyLoopActive && !loading && view.Home && !view.Results && partyRole == PartyLoopRole.Disabled)
+        {
+            loopEnabled = false;
+            StopTrial("当前不是 4 人小队，已关闭循环。");
+            return true;
+        }
         var oldCompleted = roundLoop.Completed;
-        var action = roundLoop.Tick(view, now);
+        var action = roundLoop.Tick(view, now, canInitiate: partyRole == PartyLoopRole.Leader);
         if (oldCompleted != roundLoop.Completed)
             WriteRecord(new { Kind = "RoundCompleted", At = DateTimeOffset.Now, roundLoop.Completed, roundLoop.Limit });
         if (action == RoundAction.Finish)
