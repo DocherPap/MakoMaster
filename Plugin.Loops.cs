@@ -55,7 +55,6 @@ public sealed partial class Plugin
         return PartyLoopPolicy.Resolve(partyList.Length, partyList.IsAlliance, leader?.EntityId, objects.LocalPlayer?.EntityId);
     }
     private bool loopEnabled;
-    private int loopCount = 1;
     private RoundLoop? roundLoop;
     private uint? loopTerritory;
     private uint loopNpcDataId;
@@ -107,10 +106,10 @@ public sealed partial class Plugin
             || ReadNamedAddon("_KTGCountDown") != null || ReadNamedAddon("KTGHudScore") != null
             || ReadNamedAddon("KTGPlayGuide") != null;
     }
-    private void PrepareLoop(int? requestedRounds = null, bool exitExistingResult = false)
+    private void PrepareLoop(int requestedRounds = 0, bool exitExistingResult = false)
     {
-        var rounds = requestedRounds ?? loopCount;
-        if (rounds is < 1 or > 9999) throw new InvalidDataException("循环次数应为 1～9999。");
+        var rounds = requestedRounds;
+        if (rounds is < 0 or > 9999) throw new InvalidDataException("循环次数应为 0～9999，0 表示持续运行。");
         if (!clientState.IsLoggedIn || objects.LocalPlayer == null)
             throw new InvalidDataException("请进入游戏中的魔光键影入场区域后启动循环。");
         var npc = FindEntryNpc();
@@ -149,8 +148,9 @@ public sealed partial class Plugin
         if (partyLoopActive && !loading && view.Home && !view.Results && partyRole == PartyLoopRole.Disabled)
         {
             loopEnabled = false;
-            StopTrial("当前不是 4 人小队，已关闭循环。");
-            return true;
+            partyLoopActive = false;
+            partyRole = PartyLoopRole.Leader;
+            chat.Print("[MakoMaster] 当前不是 4 人小队，已关闭小队循环判断，继续运行至手动停止。");
         }
         var oldCompleted = roundLoop.Completed;
         var action = roundLoop.Tick(view, now, canInitiate: partyRole == PartyLoopRole.Leader);

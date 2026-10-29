@@ -16,12 +16,12 @@ https://raw.githubusercontent.com/DocherPap/MakoMaster/main/repo.json
 
 1. Enter `/makomaster` to open the control window.
 2. Stand near the entry NPC, or enter an ongoing minigame, then click **Start (开始)**.
-3. With **Repeat play (循环开局)** unchecked: if a game has not started, the plugin registers, plays one game, exits the results, and stops. If you are already playing, it starts typing immediately.
+3. **Start (开始)** keeps running: register, type, exit results, and start the next game until you click Stop. Starting during a game resumes the current game.
 4. Click **Stop (停止)** to end operation and release input-field focus maintenance. F8 and Esc do not stop the plugin.
 
 ## Repeat play
 
-Check **Repeat play (循环开局)**, enter **1–9999** games in the adjacent box, then click **Start (开始)**. Requires a four-person party (cross-world parties supported): the leader selects the NPC and registers; other members wait for the leader and accept departure automatically. Everyone types and exits results automatically, stopping after the requested number of games. Outside a four-person party, repeat play turns off and Start uses its normal behavior. If party size changes, repeat play stops when you return to the entry area.
+Check **Repeat play (循环开局)** to enable four-person party handling, including cross-world parties. The leader registers with the entry NPC; other members wait for the leader and accept departure. Everyone types and exits results automatically, then continues to the next game until **Stop (停止)** is clicked. Outside a four-person party, party handling turns off and normal automatic play continues.
 
 One results screen counts as one game; individual waves do not. Move closer if the NPC is out of reach. The plugin does not move your character.
 

@@ -123,10 +123,7 @@ public sealed partial class Plugin : IDalamudPlugin
             }
             ImGui.BeginDisabled(trial != null);
             ImGui.Checkbox("循环开局", ref loopEnabled);
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(90);
-            ImGui.InputInt("##loopCount", ref loopCount, 0, 0);
-            ImGui.SameLine(); ImGui.TextUnformatted("次后停止");
+            ImGui.TextWrapped("开始后持续运行，结算后继续，点击停止结束。");
             if (loopEnabled)
             {
                 ImGui.TextWrapped("仅限 4 人小队：队长自动报名，队员等待开局；每次成绩结算计为一局。");
@@ -199,8 +196,8 @@ public sealed partial class Plugin : IDalamudPlugin
                 split[0] = "auto";
                 chat.Print("[MakoMaster] 当前不是 4 人小队，已关闭循环，按普通开始处理。");
             }
-            if (split[0] == "loop") { PrepareLoop(); partyLoopActive = true; }
-            else if (split[0] == "auto" && !IsMinigameInProgress()) PrepareLoop(1, exitExistingResult: true);
+            if (split[0] == "loop") { PrepareLoop(exitExistingResult: true); partyLoopActive = true; }
+            else if (split[0] == "auto") PrepareLoop(exitExistingResult: true);
             else roundLoop = null;
             if (saveLogs && capture == null) Execute("start 180");
             continuousMode = split[0] != "test";

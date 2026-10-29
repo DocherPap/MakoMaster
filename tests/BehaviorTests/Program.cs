@@ -394,3 +394,23 @@ Check(PartyLoopPolicy.ResolveCrossRealm(3,false,true)==PartyLoopRole.Disabled,"c
 Check(PartyLoopPolicy.ResolveCrossRealm(8,false,true)==PartyLoopRole.Disabled,"cross-world eight disabled");
 Check(PartyLoopPolicy.ResolveCrossRealm(4,true,true)==PartyLoopRole.Disabled,"cross-world alliance disabled");
 Console.WriteLine("PASS: Diga minimum preset and cross-world party role policy.");
+
+// Unlimited runs never finish at a result or after returning home, including followers.
+foreach (var initiates in new[] { true, false })
+{
+    var forever = new RoundLoop(0,true);
+    Check(forever.Unlimited,"unlimited run flag");
+    Check(forever.Tick(result,0,initiates)==RoundAction.Exit,"unlimited clears old result");
+    for(var n=0;n<12;n++)
+    {
+        long t=10000+n*20000;
+        forever.Tick(game,t,initiates);
+        Check(forever.Tick(result,t+1000,initiates)==RoundAction.Exit,"unlimited exits result");
+        forever.ActionSent(RoundAction.Exit,t+1000);
+        forever.Tick(result,t+1100,initiates);
+        Check(forever.Completed==n+1,"unlimited counts each result once");
+        forever.Tick(home,t+4000,initiates);
+        Check(forever.Tick(home,t+6000,initiates)==(initiates?RoundAction.Interact:RoundAction.None),"unlimited restarts or waits for leader");
+    }
+}
+Console.WriteLine("PASS: unlimited solo/leader/follower play continues across results without finishing.");

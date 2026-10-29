@@ -33,8 +33,9 @@ internal sealed record RoundScene(uint Territory, bool Loading, bool GameUi, boo
 // A result window completes a round; waves, empty words and loading screens do not.
 internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
 {
-    internal int Limit { get; } = limit is >= 1 and <= 9999 ? limit : throw new ArgumentOutOfRangeException(nameof(limit));
+    internal int Limit { get; } = limit is >= 0 and <= 9999 ? limit : throw new ArgumentOutOfRangeException(nameof(limit));
     internal int Completed { get; private set; }
+    internal bool Unlimited => Limit == 0;
     internal string Status { get; private set; } = "等待自动选择入场 NPC";
     private bool played, leaving, registered;
     private long nextAction, homeSince;
@@ -51,7 +52,7 @@ internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
                 return exitExistingResult && now >= nextAction ? RoundAction.Exit : RoundAction.None;
             }
             if (!leaving) { Completed++; leaving = true; }
-            Status = $"已完成 {Completed}/{Limit} 局，退出结算";
+            Status = Unlimited ? $"已完成 {Completed} 局，退出结算后继续" : $"已完成 {Completed}/{Limit} 局，退出结算";
             return now >= nextAction ? RoundAction.Exit : RoundAction.None;
         }
         if (view.Loading) { homeSince = 0; Status = "等待场景加载"; return RoundAction.None; }
@@ -60,10 +61,10 @@ internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
             if (!view.Home || view.Game) { homeSince = 0; Status = "等待返回 NPC 所在区域"; return RoundAction.None; }
             if (homeSince == 0) homeSince = now;
             if (now - homeSince < 1500) return RoundAction.None;
-            if (Completed >= Limit) { Status = $"循环完成：{Completed}/{Limit} 局"; return RoundAction.Finish; }
+            if (!Unlimited && Completed >= Limit) { Status = $"循环完成：{Completed}/{Limit} 局"; return RoundAction.Finish; }
             played = leaving = registered = false; sentScreen = ""; homeSince = 0;
         }
-        if (view.Game) { sentScreen = ""; Status = $"自动打字：第 {Completed + 1}/{Limit} 局"; return RoundAction.None; }
+        if (view.Game) { sentScreen = ""; Status = Unlimited ? $"自动打字：第 {Completed + 1} 局，持续运行至手动停止" : $"自动打字：第 {Completed + 1}/{Limit} 局"; return RoundAction.None; }
         if (!canInitiate && !view.Confirm)
         {
             Status = "队员模式：等待队长开始游戏";
