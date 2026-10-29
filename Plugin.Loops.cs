@@ -63,9 +63,17 @@ public sealed partial class Plugin
             .OrderBy(o => Vector3.DistanceSquared(player.Position, o.Position)).FirstOrDefault();
     }
 
-    private void PrepareLoop()
+    private bool IsMinigameInProgress()
     {
-        if (loopCount is < 1 or > 9999) throw new InvalidDataException("循环次数应为 1～9999。");
+        if (ReadNamedAddon("KTGResult") != null || ReadNamedAddon("KTGEnterDialogue") != null || FindEntryNpc() != null) return false;
+        return ReadNamedAddon("KTGInput") != null || ReadNamedAddon("KTGEWord") != null
+            || ReadNamedAddon("_KTGCountDown") != null || ReadNamedAddon("KTGHudScore") != null
+            || ReadNamedAddon("KTGPlayGuide") != null;
+    }
+    private void PrepareLoop(int? requestedRounds = null, bool exitExistingResult = false)
+    {
+        var rounds = requestedRounds ?? loopCount;
+        if (rounds is < 1 or > 9999) throw new InvalidDataException("循环次数应为 1～9999。");
         if (!clientState.IsLoggedIn || objects.LocalPlayer == null)
             throw new InvalidDataException("请进入游戏中的魔光键影入场区域后启动循环。");
         var npc = FindEntryNpc();
@@ -73,7 +81,7 @@ public sealed partial class Plugin
         lastLoopScene = "";
         loopNpcDataId = EntryNpcBaseId;
         loopNpcName = npc?.Name.TextValue ?? "";
-        roundLoop = new(loopCount);
+        roundLoop = new(rounds, exitExistingResult);
         loopMessage = npc == null ? "正在寻找魔光键影入场 NPC，请靠近入场区域。" : "";
     }
     // Returns true while menus / scene transitions own input, or after the finite loop stops.

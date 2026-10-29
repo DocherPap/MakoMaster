@@ -56,6 +56,19 @@ internal sealed class TrialMachine
         var buffer = WordMatching.InputBuffer(view.Buffer);
         foreach (var path in submitted.Where(p => !view.Words.Any(w => w.Path == p.Key && WordMatching.Same(w.Text, p.Value))).Select(p => p.Key).ToArray())
             submitted.Remove(path);
+        // A newly available cast/shield bypasses the ordinary between-word delay.
+        // This uses only live priority, never the cast's remaining time or pause window.
+        if (stage is Stage.Idle or Stage.AfterSubmit or Stage.Clear or Stage.ClearWait)
+        {
+            var urgentWaiting = view.Words.Any(w => CanPrioritize(w, now));
+            if (urgentWaiting)
+            {
+                if (stage == Stage.AfterSubmit && buffer.Length == 0) FinishAttempt(now);
+                if (stage == Stage.Idle) nextActionAt = now;
+                if (stage is Stage.Clear or Stage.ClearWait && clearDestination == ClearDestination.Idle)
+                    clearDestination = ClearDestination.Priority;
+            }
+        }
         if (stage is Stage.Typing or Stage.Search or Stage.PageWait or Stage.ChooseWait)
         {
             var current = view.Words.FirstOrDefault(w => w.Path == targetPath && WordMatching.Same(w.Text, word));
@@ -242,6 +255,15 @@ internal sealed class TrialMachine
         if (readingIndexes[characterIndex] + 1 < readings[characterIndex].Length)
         { readingIndexes[characterIndex]++; BeginClear(ClearDestination.Characters, now, "更换读音后逐字重试"); }
         else { skipUntil[normalizedWord] = now + 15000; BeginClear(ClearDestination.Idle, now, "当前字候选未找到，清空后处理其他题目"); }
+    }
+    private bool CanPrioritize(TrialWord target, long now)
+    {
+        if (target.Priority <= 0 || !double.IsFinite(target.DistanceSquared)) return false;
+        var key = WordMatching.Normalize(target.Text);
+        if (submitted.TryGetValue(target.Path, out var sentWord) && sentWord == key) return false;
+        if (skipUntil.TryGetValue(key, out var until) && until > now) return false;
+        var options = ReadingsFor(target.Text, FindEntry(target.Text));
+        return options.Length > 0 && options.All(r => r.Length > 0);
     }
     private DictionaryEntry? FindEntry(string text)
     {

@@ -146,14 +146,14 @@ Check(!gate.Tick([new("/a","运动体探知干扰器",5)],0),"paused more than h
 Check(!gate.Tick([new("/a","运动体探知干扰器",1.001)],3999),"precise cast boundary too early");
 Check(gate.Tick([new("/a","运动体探知干扰器",1)],4000),"missing pre-cast one-second pause");
 Check(gate.Tick([],5000),"missing post-cast pause");
-Check(gate.Tick([],7000) && !gate.Tick([],7001),"post-cast pause did not expire at 2 seconds");
-Check(!gate.Tick([new("/b","诅咒视线",null)],7500) && gate.AwaitingProgress,"missing timer froze entire cast");
+Check(gate.Tick([],7500) && !gate.Tick([],7501),"post-cast pause did not expire at 2.5 seconds");
+Check(!gate.Tick([new("/b","诅咒视线",null)],8000) && gate.AwaitingProgress,"missing timer froze entire cast");
 Check(!gate.Tick([new("/b","诅咒视线",null)],9000),"missing timer paused before cast end");
-Check(gate.Tick([],10000) && !gate.Tick([],12001),"curse did not resume after disappearance guard");
+Check(gate.Tick([],10000) && !gate.Tick([],12501),"curse did not resume after disappearance guard");
 gate.Reset();
 Check(gate.Tick([new("/a","运动体探知干扰器",0.2),new("/b","诅咒视线",0.8)],0),"overlap initial pause");
 Check(gate.Tick([new("/b","诅咒视线",0.2)],600),"overlap gap incorrectly resumed typing");
-Check(gate.Tick([],800) && !gate.Tick([],2801),"overlapping guards failed to expire");
+Check(gate.Tick([],800) && !gate.Tick([],3301),"overlapping guards failed to expire");
 
 // Pause/resume retains the locked composition and does not trigger an input timeout.
 var frozen=new TrialMachine(dictionary,0,new Random(1),true,timing);
@@ -254,7 +254,7 @@ var progressGate=new SkillPauseGate();
 for(long t=0;t<4000;t+=50)
     Check(!progressGate.Tick([new("/progress","运动体探知干扰器",null,t/5000.0)],t),"progress-derived pause began before final one-second");
 Check(progressGate.Tick([new("/progress","运动体探知干扰器",null,0.8)],4000),"progress-derived pause did not begin in final one-second");
-Check(progressGate.Tick([],5000) && progressGate.Tick([],7000) && !progressGate.Tick([],7001),"progress-derived post-cast guard wrong");
+Check(progressGate.Tick([],5000) && progressGate.Tick([],7500) && !progressGate.Tick([],7501),"progress-derived post-cast guard wrong");
 Console.WriteLine("PASS: failed submissions are never retried while target remains; replacement targets rearm; live cast styles outrank history; fill-progress inference pauses only final/post one-second.");
 
 // Replay only anonymized timing/progress samples from the observed native fill node.
@@ -270,7 +270,7 @@ foreach(var sample in capturedSamples)
 }
 Check(firstPausedAt is >=3000 and <=3900,"recorded progress did not gate near the end: "+firstPausedAt);
 Check(capturedGate.Tick([],lastCapturedMs+100),"recorded cast end missing guard");
-Check(!capturedGate.Tick([],lastCapturedMs+2101),"recorded cast guard did not expire");
+Check(!capturedGate.Tick([],lastCapturedMs+2601),"recorded cast guard did not expire");
 Console.WriteLine("PASS: anonymized actual native cast-fill samples pause near cast completion, not its beginning.");
 
 // Default startup and in-memory learning must not create any directories or files.
@@ -311,8 +311,8 @@ Check(equalTier.Tick(new(true,"j",[new("/far/20","计步",9999,1),new("/near/20"
 var untypable=new TrialMachine(dictionary,0,new Random(1),true,timing);
 untypable.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0);
 Check(untypable.Tick(new(true,"j",[normalWord,new("/missing/20","龘",0,3)],new Dictionary<int,string>()),100)=='i',"unreadable urgent word caused an endless clear/restart");
-Check(SkillPauseGate.BeforeMs==1000 && SkillPauseGate.AfterMs==2000,"dangerous-skill pause interval constants wrong");
-Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 2 seconds after cast.");
+Check(SkillPauseGate.BeforeMs==1000 && SkillPauseGate.AfterMs==2500,"dangerous-skill pause interval constants wrong");
+Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 2.5 seconds after cast.");
 
 // Confirmed skill classification survives transient hidden interrupt markers.
 var needleWords=new WordResolver().Resolve([
@@ -362,3 +362,51 @@ finalLoop.Tick(new(false,false,false,false,false,true),1000);
 finalLoop.Tick(returnedView,2000);
 Check(finalLoop.Tick(returnedView,3600)==RoundAction.Finish,"last round did not stop after returning with stale UI");
 Console.WriteLine("PASS: in-game loop startup; NPC/entry evidence overrides stale UI and wrong startup territory; loading/unrelated-zone guards; restart or finish after result.");
+
+InputLanguageTests.Run();
+
+ChestOpeningTests.Run();
+
+// Cast priority begins on detection, even with almost the full cast duration left.
+var earlyCastWords=new WordResolver().Resolve([
+    new("/normal/20","近",true,true,0),new("/interruptible/20","计步",true,true,9999),new("/ordinarycast/20","计数",true,true,999)
+],dictionary,new Dictionary<string,string>{{"/interruptible","？针刺"},{"/ordinarycast","其他读条"}},new HashSet<string>(),new Dictionary<string,bool>{{"/interruptible",false},{"/ordinarycast",false}});
+Check(earlyCastWords.Single(w=>w.Text=="计步").Priority==2 && earlyCastWords.Single(w=>w.Text=="计数").Priority==1,"early cast did not immediately raise priority");
+Check(!new SkillPauseGate().Tick([new("/different","诅咒视线",10,0.01)],0),"cast-priority detection incorrectly invoked the end-of-cast pause");
+foreach(var priority in new[]{1,2})
+{
+    var cooldownTiming=new TimingSettings(100,100,1600,1600);
+    var machine=new TrialMachine(dictionary,0,new Random(1),true,cooldownTiming);
+    var ordinary=new TrialWord("/normal/20","近",0);
+    Check(machine.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),0)=='j',"cooldown bypass setup");
+    Check(machine.Tick(new(true,"j",[ordinary],new Dictionary<int,string>{{1,"近"}}),100)=='1',"cooldown bypass setup candidate");
+    Check(machine.Tick(new(true,"近",[ordinary],new Dictionary<int,string>()),300)=='\n',"cooldown bypass setup submit");
+    machine.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),550); // ordinary delay would end at 2150
+    var cast=new TrialWord("/newcast/20","计步",9999,priority,"新读条");
+    Check(machine.Tick(new(true,"",[ordinary,cast],new Dictionary<int,string>()),600)=='j' && machine.Target=="计步",
+        "new cast waited for ordinary word delay: priority="+priority);
+    var settle=new TrialMachine(dictionary,0,new Random(1),true,cooldownTiming);
+    settle.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),0);
+    settle.Tick(new(true,"j",[ordinary],new Dictionary<int,string>{{1,"近"}}),100);
+    settle.Tick(new(true,"近",[ordinary],new Dictionary<int,string>()),300);
+    Check(settle.Tick(new(true,"",[ordinary,cast],new Dictionary<int,string>()),350)=='j' && settle.Target=="计步",
+        "confirmed empty buffer after send still delayed the new cast");
+}
+Console.WriteLine("PASS: interruptible and ordinary cast priority starts at detection; urgent words bypass ordinary delays; end-of-cast pause stays independent.");
+
+Check(TimingSettings.FastPreset==new TimingSettings(20,50,400,800) && TimingSettings.FastPreset.ValidationError==null,"fast preset is not half of defaults");
+Check(new TimingSettings()==new TimingSettings(40,100,800,1600),"fast preset changed defaults");
+var singleStart=new RoundLoop(1,true);
+var priorResult=new RoundView(false,false,false,false,false,true);
+Check(singleStart.Tick(priorResult,0)==RoundAction.Exit && singleStart.Completed==0,"old result was counted or not exited before single start");
+singleStart.ActionSent(RoundAction.Exit,0);
+Check(singleStart.Tick(priorResult,500)==RoundAction.None && singleStart.Completed==0,"old result repeated before action cooldown");
+var entryHome=new RoundView(true,false,false,false,false,false);
+Check(singleStart.Tick(entryHome,2500)==RoundAction.Interact,"single start did not request NPC interaction");singleStart.ActionSent(RoundAction.Interact,2500);
+Check(singleStart.Tick(entryHome with {Entry=true},4500)==RoundAction.Apply,"single start did not request registration");singleStart.ActionSent(RoundAction.Apply,4500);
+Check(singleStart.Tick(entryHome with {Confirm=true},6500)==RoundAction.Accept,"single start did not confirm departure");singleStart.ActionSent(RoundAction.Accept,6500);
+singleStart.Tick(new(false,false,true,false,false,false),9000);
+Check(singleStart.Tick(priorResult,15000)==RoundAction.Exit && singleStart.Completed==1,"single start failed to count its new game");singleStart.ActionSent(RoundAction.Exit,15000);
+singleStart.Tick(entryHome,17500);
+Check(singleStart.Tick(entryHome,19500)==RoundAction.Finish,"single start began a second game");
+Console.WriteLine("PASS: fast preset is half of defaults; non-loop start can clear a prior result, register, finish exactly one game, exit and stop.");

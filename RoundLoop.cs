@@ -15,7 +15,7 @@ internal sealed record RoundScene(uint Territory, bool Loading, bool GameUi, boo
     }
 }
 // A result window completes a round; waves, empty words and loading screens do not.
-internal sealed class RoundLoop(int limit)
+internal sealed class RoundLoop(int limit, bool exitExistingResult = false)
 {
     internal int Limit { get; } = limit is >= 1 and <= 9999 ? limit : throw new ArgumentOutOfRangeException(nameof(limit));
     internal int Completed { get; private set; }
@@ -29,7 +29,11 @@ internal sealed class RoundLoop(int limit)
         if (view.Game && !leaving) played = true;
         if (view.Results)
         {
-            if (!played) { Status = "等待新一局，当前结算不计次"; return RoundAction.None; }
+            if (!played)
+            {
+                Status = exitExistingResult ? "退出上一局结算，准备开始新的一局" : "等待新一局，当前结算不计次";
+                return exitExistingResult && now >= nextAction ? RoundAction.Exit : RoundAction.None;
+            }
             if (!leaving) { Completed++; leaving = true; }
             Status = $"已完成 {Completed}/{Limit} 局，退出结算";
             return now >= nextAction ? RoundAction.Exit : RoundAction.None;

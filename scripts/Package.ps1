@@ -39,7 +39,6 @@ foreach ($pair in @{
     RepoUrl = $repository
     DownloadLinkInstall = $download
     DownloadLinkUpdate = $download
-    DownloadLinkTesting = $download
     IsHide = $false
     IsTestingExclusive = $false
     LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()

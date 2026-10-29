@@ -46,12 +46,13 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
         IChatGui chat, IFramework framework, IPluginLog log, IObjectTable objects,
-        ITargetManager targets, IClientState clientState, IAddonLifecycle addonLifecycle)
+        ITargetManager targets, IClientState clientState, IAddonLifecycle addonLifecycle, IDataManager dataManager)
     {
         this.pi = pi; this.commands = commands; this.chat = chat;
         this.framework = framework; this.log = log;
         this.objects = objects; this.targetManager = targets; this.clientState = clientState;
         this.addonLifecycle = addonLifecycle;
+        this.dataManager = dataManager;
         InitializeDiagnostics();
         try
         {
@@ -88,8 +89,9 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextUnformatted(trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
             if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
             if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
-            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2 秒暂停");
+            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2.5 秒暂停");
             if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
+            if (inputEnvironmentMessage.Length > 0) ImGui.TextWrapped(inputEnvironmentMessage);
             ImGui.Separator();
             if (ImGui.CollapsingHeader("高级设置"))
             {
@@ -110,7 +112,9 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
                 if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
                 if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
-                if (ImGui.Button("恢复默认间隔")) { keyMinMs = 40; keyMaxMs = 100; wordMinMs = 800; wordMaxMs = 1600; }
+                if (ImGui.Button("恢复默认间隔")) ApplyTimingPreset(new TimingSettings());
+                ImGui.SameLine();
+                if (ImGui.Button("预设：快速")) ApplyTimingPreset(TimingSettings.FastPreset);
                 ImGui.EndDisabled();
                 if (ImGui.Button(saveLogs ? "关闭日志" : "保存日志")) OnCommand("", "toggle-logs");
                 ImGui.SameLine(); ImGui.TextUnformatted(saveLogs ? "已开启" : "已关闭");
@@ -127,19 +131,26 @@ public sealed partial class Plugin : IDalamudPlugin
             }
             ImGui.EndDisabled();
             ImGui.Separator();
-            ImGui.BeginDisabled(trial != null);
+            ImGui.BeginDisabled(trial != null || OpeningChests);
             if (ImGui.Button("开始", new Vector2(135, 36))) OnCommand("", loopEnabled ? "loop" : "auto");
             ImGui.EndDisabled(); ImGui.SameLine();
-            ImGui.BeginDisabled(trial == null && capture == null);
+            ImGui.BeginDisabled(trial == null && capture == null && !OpeningChests);
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.65f, 0.16f, 0.16f, 1));
             if (ImGui.Button("停止", new Vector2(135, 36))) OnCommand("", "stop");
             ImGui.PopStyleColor();
             ImGui.EndDisabled();
-            if (trial == null && capture == null && ImGui.Button("隐藏窗口")) showControlWindow = false;
+            DrawChestControls();
+            if (trial == null && capture == null && !OpeningChests && ImGui.Button("隐藏窗口")) showControlWindow = false;
         }
         finally { ImGui.End(); }
     }
 
+    private void ApplyTimingPreset(TimingSettings preset)
+    {
+        keyMinMs = preset.KeyMinMs; keyMaxMs = preset.KeyMaxMs;
+        wordMinMs = preset.WordMinMs; wordMaxMs = preset.WordMaxMs;
+        timingMessage = "已应用，启动时生效；未保存文件。";
+    }
     private void SaveTimingSettings(bool persist = true)
     {
         var updated = new TimingSettings(keyMinMs, keyMaxMs, wordMinMs, wordMaxMs);
@@ -168,19 +179,24 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var split = args.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         if (split.Length == 0 || split[0] == "ui") { ShowControlWindow(); return; }
+        if (split[0] == "open-chests") { StartChestOpening(); return; }
+        if (split[0] == "stop-chests") { StopChestOpening("手动停止开箱"); return; }
         if (split[0] == "toggle-logs") { SetLogSaving(!saveLogs); return; }
         if (split[0] == "save-timing") { if (trial == null) SaveTimingSettings(); return; }
         if (split[0] is "test" or "auto" or "loop")
         {
             if (trial != null) { ShowControlWindow(); chat.Print("[MakoMaster] 已等待或正在输入，请使用控制窗口的停止按钮。"); return; }
+            if (OpeningChests) { chestMessage = "请先停止开箱，再启动自动打字或循环。"; return; }
             SaveTimingSettings(saveLogs);
             var dictionary = vocabulary?.EffectiveDictionary ?? throw new InvalidDataException("词库未能加载，详见卫月日志");
             if (dictionary.Count == 0) throw new InvalidDataException("词库为空");
             if (split[0] == "loop") PrepareLoop();
+            else if (split[0] == "auto" && !IsMinigameInProgress()) PrepareLoop(1, exitExistingResult: true);
             else roundLoop = null;
             if (saveLogs && capture == null) Execute("start 180");
             continuousMode = split[0] != "test";
             captureUntil = continuousMode ? long.MaxValue : Math.Max(captureUntil, Environment.TickCount64 + 180000);
+            ResetInputEnvironment();
             trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings);
             trialEarliest = Environment.TickCount64 + 3000;
             nextTrialSample = 0;
@@ -220,7 +236,7 @@ public sealed partial class Plugin : IDalamudPlugin
             chat.Print("[MakoMaster] 文件：" + lastCapture);
             return;
         }
-        if (split[0] == "stop") { StopTrial("手动停止"); SetLogSaving(false); return; }
+        if (split[0] == "stop") { StopChestOpening("手动停止"); StopTrial("手动停止"); SetLogSaving(false); return; }
         if (split[0] == "status")
         {
             if (vocabulary != null) chat.Print($"[MakoMaster] 已记录 {vocabulary.SeenCount} 种题目，新增学习 {vocabulary.LearnedCount} 条；可用词库 {vocabulary.EffectiveDictionary.Count} 条。");
@@ -289,6 +305,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateVocabulary(Environment.TickCount64);
         try
         {
+            UpdateChestOpening(Environment.TickCount64);
             keyboard.ReleaseDue(Environment.TickCount64);
             UpdateTrial(Environment.TickCount64);
         }
@@ -379,6 +396,7 @@ public sealed partial class Plugin : IDalamudPlugin
     }
     private void PauseInput(string reason, long now)
     {
+        environmentPaused = false; environmentPauseAt = 0;
         trial?.PauseForScene(reason, now);
         lastRunResult = reason; nextTrialSample = now + 1000;
     }
@@ -438,21 +456,25 @@ public sealed partial class Plugin : IDalamudPlugin
         { PauseInput("等待松开或关闭：" + blockReason, now); return; }
         if (now < trialEarliest || now < nextTrialSample) return;
         nextTrialSample = now + 10;
-        if (UpdateRoundLoop(now)) return;
-        var casting = ReadNamedAddon("KTGEnemyCastBar");
-        ObserveInterrupts(casting);
-        if (UpdateSkillPause(casting, now) || keyboard.Holding) return;
+        if (!inputLanguage.Tick(now)) { HoldForInputEnvironment(inputLanguage.Status, now); return; }
+        if (UpdateRoundLoop(now)) { ResumeInputEnvironment(now); return; }
         var input = ReadNamedAddon("KTGInput");
         var words = ReadNamedAddon("KTGEWord");
         var inResults = ReadNamedAddon("_KTGClear") != null || ReadNamedAddon("KTGResult") != null;
         if (words == null || input == null || inResults)
         {
+            ResumeInputEnvironment(now);
             wordResolver.Reset();
             trial.Tick(new TrialView(false, "", [], new Dictionary<int,string>()), now);
             if (lastTrialState != trial.Result)
             { lastTrialState = trial.Result; WriteRecord(new { Kind = "SceneWait", At = DateTimeOffset.Now, State = trial.Result, ResultsVisible = inResults }); }
             return;
         }
+        if (!MaintainInputFocus(now)) { HoldForInputEnvironment("正在恢复小游戏输入框焦点", now); return; }
+        ResumeInputEnvironment(now);
+        var casting = ReadNamedAddon("KTGEnemyCastBar");
+        ObserveInterrupts(casting);
+        if (UpdateSkillPause(casting, now) || keyboard.Holding) return;
         // The game hides this text node when the field is empty after Enter.
         // Its visibility and AtkValue[2] are not readiness signals. The live
         // minigame windows plus the existing buffer node gate input instead.
@@ -537,6 +559,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void StopTrial(string reason)
     {
         if (trial == null && !keyboard.Holding) return;
+        ResetInputEnvironment();
         var target = trial?.Target;
         var completed = trial?.CompletedCount ?? 0;
         var wasContinuous = continuousMode;
@@ -666,6 +689,7 @@ public sealed partial class Plugin : IDalamudPlugin
         pi.UiBuilder.OpenConfigUi -= ShowControlWindow;
         framework.Update -= OnUpdate;
         DisposeDiagnostics();
+        StopChestOpening("插件卸载");
         StopTrial("插件卸载");
         StopCapture("插件卸载");
         try { vocabulary?.Flush(); }

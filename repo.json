@@ -3,20 +3,20 @@
     "Author": "DocherPap",
     "Name": "MakoMaster",
     "InternalName": "MakoMaster",
-    "AssemblyVersion": "0.10.8.0",
-    "Description": "魔光键影自动输入与有限次数循环游玩。绿色护盾优先、按当前读条类型排序、整词及逐字候选匹配；危险技能预计结束前一秒至结束后两秒暂停。文件保存默认关闭，可在高级设置中开启。",
+    "AssemblyVersion": "1.0.0.0",
+    "Description": "魔光键影自动输入与有限次数循环。启动时尝试切换中文输入法，运行中维护小游戏输入框焦点，停止后解除；护盾与读条优先，危险技能暂停，文件保存默认关闭。",
     "Punchline": "魔光键影自动输入与循环游玩",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "LoadRequiredState": 0,
     "LoadSync": false,
     "CanUnloadAsync": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.8.0.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.8.0.zip",
+    "Changelog": "1.0 正式版：自动输入、技能与护盾优先、危险技能暂停、单局及循环游玩、自动选中入场 NPC、中文输入法与焦点维护、宝箱批量开启、快速间隔预设；文件保存默认关闭。",
     "IsHide": false,
-    "LastUpdate": 1793223742,
-    "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/DocherPap/MakoMaster",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-0.10.8.0.zip"
+    "LastUpdate": 1793239092,
+    "IsTestingExclusive": false,
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.0.0.zip",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.0.0.zip"
   }
 ]

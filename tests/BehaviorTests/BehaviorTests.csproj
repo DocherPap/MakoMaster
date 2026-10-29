@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
  <ItemGroup>
+  <Compile Include="../../ChestOpeningSession.cs" Link="ChestOpeningSession.cs" />
+  <Compile Include="../../InputLanguageGuard.cs" Link="InputLanguageGuard.cs" />
   <Compile Include="../../TrialMachine.cs" Link="TrialMachine.cs" />
   <Compile Include="../../WordMatching.cs" Link="WordMatching.cs" />
   <Compile Include="../../TimingSettings.cs" Link="TimingSettings.cs" />

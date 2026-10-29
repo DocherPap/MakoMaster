@@ -3,8 +3,8 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks><PlatformTarget>x64</PlatformTarget>
-    <AssemblyVersion>0.10.8.0</AssemblyVersion>
-    <Version>0.10.8</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>1.0.0</Version>
     <Deterministic>true</Deterministic>
     <PathMap>$(MSBuildProjectDirectory)=/_/MakoMaster</PathMap>
     <DebugType>none</DebugType>
@@ -16,6 +16,7 @@
     <Reference Include="Dalamud"><HintPath>$(DalamudLibPath)/Dalamud.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FFXIVClientStructs"><HintPath>$(DalamudLibPath)/FFXIVClientStructs.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="InteropGenerator.Runtime"><HintPath>$(DalamudLibPath)/InteropGenerator.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Lumina.Excel"><HintPath>$(DalamudLibPath)/Lumina.Excel.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Lumina"><HintPath>$(DalamudLibPath)/Lumina.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Dalamud.Bindings.ImGui"><HintPath>$(DalamudLibPath)/Dalamud.Bindings.ImGui.dll</HintPath><Private>false</Private></Reference>
     <None Update="MakoMaster.json" CopyToOutputDirectory="PreserveNewest" />
