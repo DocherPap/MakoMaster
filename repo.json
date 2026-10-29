@@ -12,11 +12,11 @@
     "LoadSync": false,
     "CanUnloadAsync": false,
     "Changelog": "1.0.1：保留所有按键及词间间隔，技能和屏障不再跳过停顿；全场按屏障、可打断、不可打断、普通词排序，距离只在同级内比较。",
-    "IsHide": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
-    "LastUpdate": 1793240379,
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
+    "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/DocherPap/MakoMaster",
-    "IsTestingExclusive": false
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-1.0.1.0.zip",
+    "IsHide": false,
+    "LastUpdate": 1793241360
   }
 ]
