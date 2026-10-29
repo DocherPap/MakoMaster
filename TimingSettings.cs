@@ -6,6 +6,7 @@ namespace MakoMaster;
 internal sealed record TimingSettings(int KeyMinMs = 40, int KeyMaxMs = 100,
     int WordMinMs = 800, int WordMaxMs = 1600)
 {
+    internal static TimingSettings DigaPreset => new(10, 10, 0, 0);
     internal static TimingSettings FastPreset
     {
         get

@@ -19,8 +19,37 @@ public sealed partial class Plugin
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IPartyList partyList;
     private bool partyLoopActive;
-    private PartyLoopRole ReadPartyLoopRole()
+    private unsafe PartyLoopRole ReadPartyLoopRole()
     {
+        // Cross-world parties are not represented by IPartyList outside an instance.
+        var cross = FFXIVClientStructs.FFXIV.Client.UI.Info.InfoProxyCrossRealm.Instance();
+        if (cross != null && cross->IsInCrossRealmParty)
+        {
+            var groups = cross->CrossRealmGroups;
+            var index = cross->LocalPlayerGroupIndex;
+            if (cross->IsInAllianceRaid || cross->GroupCount > 1) return PartyLoopRole.Disabled;
+            if (cross->GroupCount == 0 || index >= cross->GroupCount || index >= groups.Length)
+                return PartyLoopRole.Waiting;
+            ref var group = ref groups[index];
+            var count = (int)group.GroupMemberCount;
+            var members = group.GroupMembers;
+            if (count > members.Length) return PartyLoopRole.Waiting;
+            var player = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance();
+            var contentId = player == null || !player->IsLoaded ? 0UL : player->ContentId;
+            var entityId = objects.LocalPlayer?.EntityId;
+            bool? isLeader = null;
+            for (var i = 0; i < count; i++)
+            {
+                ref var member = ref members[i];
+                if (contentId != 0 && member.ContentId == contentId
+                    || entityId is > 0 and < uint.MaxValue && member.EntityId == entityId)
+                {
+                    isLeader = member.IsPartyLeader;
+                    break;
+                }
+            }
+            return PartyLoopPolicy.ResolveCrossRealm(count, false, isLeader);
+        }
         var leaderIndex = (int)partyList.PartyLeaderIndex;
         var leader = leaderIndex >= 0 && leaderIndex < partyList.Length ? partyList[leaderIndex] : null;
         return PartyLoopPolicy.Resolve(partyList.Length, partyList.IsAlliance, leader?.EntityId, objects.LocalPlayer?.EntityId);

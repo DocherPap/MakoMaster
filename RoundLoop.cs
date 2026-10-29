@@ -3,6 +3,11 @@ namespace MakoMaster;
 internal enum PartyLoopRole { Disabled, Waiting, Leader, Member }
 internal static class PartyLoopPolicy
 {
+    internal static PartyLoopRole ResolveCrossRealm(int count, bool alliance, bool? localIsLeader)
+    {
+        if (count != 4 || alliance) return PartyLoopRole.Disabled;
+        return localIsLeader switch { true => PartyLoopRole.Leader, false => PartyLoopRole.Member, null => PartyLoopRole.Waiting };
+    }
     internal static PartyLoopRole Resolve(int count, bool alliance, uint? leaderId, uint? playerId)
     {
         if (count != 4 || alliance) return PartyLoopRole.Disabled;

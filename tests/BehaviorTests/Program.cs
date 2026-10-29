@@ -383,3 +383,14 @@ Check(follower.Tick(result,11000,false)==RoundAction.Exit && follower.Completed=
 follower.Tick(home,14000,false);
 Check(follower.Tick(home,16000,false)==RoundAction.Finish,"member finishes limit");
 Console.WriteLine("PASS: party size, leadership, follower waiting/confirmation/results/limit and leader transfer.");
+
+Check(TimingSettings.DigaPreset == new TimingSettings(10,10,0,0) && TimingSettings.DigaPreset.ValidationError == null,"Diga minimum preset");
+Check(new TimingSettings(9,10,0,0).ValidationError != null,"minimum key boundary");
+for(var i=0;i<20;i++) Check(TimingSettings.DigaPreset.NextKey(new Random(i))==10 && TimingSettings.DigaPreset.NextWord(new Random(i))==0,"Diga has no random range");
+Check(PartyLoopPolicy.ResolveCrossRealm(4,false,true)==PartyLoopRole.Leader,"cross-world leader");
+Check(PartyLoopPolicy.ResolveCrossRealm(4,false,false)==PartyLoopRole.Member,"cross-world member without entity IDs");
+Check(PartyLoopPolicy.ResolveCrossRealm(4,false,null)==PartyLoopRole.Waiting,"unresolved cross-world identity waits");
+Check(PartyLoopPolicy.ResolveCrossRealm(3,false,true)==PartyLoopRole.Disabled,"cross-world three disabled");
+Check(PartyLoopPolicy.ResolveCrossRealm(8,false,true)==PartyLoopRole.Disabled,"cross-world eight disabled");
+Check(PartyLoopPolicy.ResolveCrossRealm(4,true,true)==PartyLoopRole.Disabled,"cross-world alliance disabled");
+Console.WriteLine("PASS: Diga minimum preset and cross-world party role policy.");

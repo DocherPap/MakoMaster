@@ -21,7 +21,7 @@ https://raw.githubusercontent.com/DocherPap/MakoMaster/main/repo.json
 
 ## Repeat play
 
-Check **Repeat play (循环开局)**, enter **1–9999** games in the adjacent box, then click **Start (开始)**. Requires a four-person party: the leader selects the NPC and registers; other members wait for the leader and accept departure automatically. Everyone types and exits results automatically, stopping after the requested number of games. Outside a four-person party, repeat play turns off and Start uses its normal behavior. If party size changes, repeat play stops when you return to the entry area.
+Check **Repeat play (循环开局)**, enter **1–9999** games in the adjacent box, then click **Start (开始)**. Requires a four-person party (cross-world parties supported): the leader selects the NPC and registers; other members wait for the leader and accept departure automatically. Everyone types and exits results automatically, stopping after the requested number of games. Outside a four-person party, repeat play turns off and Start uses its normal behavior. If party size changes, repeat play stops when you return to the entry area.
 
 One results screen counts as one game; individual waves do not. Move closer if the NPC is out of reach. The plugin does not move your character.
 
@@ -38,10 +38,12 @@ Click **Start opening (开始开箱)**. Click **Stop opening (停止开箱)** or
 
 Expand **Advanced settings (高级设置)** to change the random delays. Stop automatic typing before editing them.
 
-| Delay | Default | Fast preset |
-| --- | --- | --- |
-| Each key | 40–100 ms | 20–50 ms |
-| Each word | 800–1600 ms | 400–800 ms |
+| Delay | Default | Fast preset | Diga preset (迪迦) |
+| --- | --- | --- | --- |
+| Each key | 40–100 ms | 20–50 ms | 10 ms |
+| Each word | 800–1600 ms | 400–800 ms | 0 ms |
+
+**预设：迪迦** applies the minimum allowed delays. IME response waits and dangerous-skill pauses still apply.
 
 Click **Restore defaults (恢复默认间隔)** or **Preset: Fast (预设：快速)** to apply a preset. Click **Save settings (保存设置)** to keep the values for future use.
 

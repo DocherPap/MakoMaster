@@ -116,6 +116,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (ImGui.Button("恢复默认间隔")) ApplyTimingPreset(new TimingSettings());
                 ImGui.SameLine();
                 if (ImGui.Button("预设：快速")) ApplyTimingPreset(TimingSettings.FastPreset);
+                if (ImGui.Button("预设：迪迦")) ApplyTimingPreset(TimingSettings.DigaPreset);
                 ImGui.EndDisabled();
                 if (ImGui.Button(saveLogs ? "关闭日志" : "保存日志")) OnCommand("", "toggle-logs");
                 ImGui.SameLine(); ImGui.TextUnformatted(saveLogs ? "已开启" : "已关闭");
