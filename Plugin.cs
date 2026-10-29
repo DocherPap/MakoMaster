@@ -45,6 +45,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Queue<object> captureBacklog = new();
     private bool saveLogs;
     private bool chatOutputEnabled = true;
+    private bool imeDictionaryInstalled = true;
     private string TimingFile => Path.Combine(pi.AssemblyLocation.DirectoryName!, "timing-settings.json");
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
@@ -147,8 +148,12 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.SetNextItemWidth(NumberInputWidth(5));
                 ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
                 if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
-                if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
+                if (timingMessage.Length > 0) { ImGui.SameLine(); ImGui.TextUnformatted(timingMessage); }
                 DrawTimingPresets();
+                ImGui.EndDisabled();
+                ImGui.BeginDisabled(trial != null);
+                ImGui.Checkbox("输入法已安装词库", ref imeDictionaryInstalled);
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("如果已经安装，输入时会直接整词句输入并提前选择符合的词句；否则会一个字一个字输入。");
                 ImGui.EndDisabled();
                 ImGui.Checkbox("聊天框输出", ref chatOutputEnabled);
                 var logSavingChecked = saveLogs;
@@ -247,7 +252,7 @@ public sealed partial class Plugin : IDalamudPlugin
             continuousMode = split[0] != "test";
             captureUntil = continuousMode ? long.MaxValue : Math.Max(captureUntil, Environment.TickCount64 + 180000);
             ResetInputEnvironment();
-            trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings);
+            trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings, imeDictionaryInstalled: imeDictionaryInstalled);
             trialEarliest = Environment.TickCount64 + 3000;
             nextTrialSample = 0;
             lastTrialState = "";
@@ -257,7 +262,7 @@ public sealed partial class Plugin : IDalamudPlugin
             skillPause.Reset(); skillPaused = false; lastSkillPauseTick = 0;
             showControlWindow = true;
             WriteRecord(new { Kind = "InputMode", At = DateTimeOffset.Now, Continuous = continuousMode,
-                TimingSettings = timingSettings,
+                TimingSettings = timingSettings, ImeDictionaryInstalled = imeDictionaryInstalled,
                 LoopCount = roundLoop?.Limit, Npc = loopNpcName, NpcDataId = loopNpcDataId,
                 Priority = "green barrier > confirmed interruptible cast > other cast > normal; distance within tier", AnchorX = 0.5, AnchorY = 1.0 });
             PrintChat($"[MakoMaster] 词库 {dictionary.Count} 条。{(continuousMode ? "连续模式" : "一题试打")}已待命，三秒后开始检查；使用控制窗口按钮停止。");

@@ -12,6 +12,7 @@ internal sealed class TrialMachine
     private readonly IReadOnlyDictionary<string, DictionaryEntry> dictionary;
     private readonly Random random;
     private readonly bool continuous;
+    private readonly bool imeDictionaryInstalled;
     private readonly TimingSettings timings;
     private readonly Dictionary<string, long> skipUntil = new();
     private readonly Dictionary<string, string> submitted = new();
@@ -36,10 +37,11 @@ internal sealed class TrialMachine
     internal void ExtendWait(long milliseconds) { nextActionAt += milliseconds; changedAt += milliseconds; nextKeyAllowedAt += milliseconds; }
     internal Queue<(string Word, string Pinyin, string Reason)> Fallbacks { get; } = new();
     internal Queue<DictionaryEntry> ComposedEntries { get; } = new();
-    internal TrialMachine(IReadOnlyDictionary<string, DictionaryEntry> dictionary, long now, Random? timingRandom = null, bool continuous = false, TimingSettings? timings = null)
+    internal TrialMachine(IReadOnlyDictionary<string, DictionaryEntry> dictionary, long now, Random? timingRandom = null, bool continuous = false, TimingSettings? timings = null, bool imeDictionaryInstalled = true)
     {
         this.dictionary = dictionary; random = timingRandom ?? Random.Shared;
         this.continuous = continuous; this.timings = timings ?? new();
+        this.imeDictionaryInstalled = imeDictionaryInstalled;
         if (this.timings.ValidationError != null) throw new ArgumentException(this.timings.ValidationError);
         nextActionAt = changedAt = now;
     }
@@ -97,15 +99,16 @@ internal sealed class TrialMachine
                     if (skipUntil.TryGetValue(key, out var until) && until > now) continue;
                     entry = FindEntry(target.Text);
                     var options = ReadingsFor(target.Text, entry);
-                    if (options.Length == 0 || (entry == null && options.Any(x => x.Length == 0))) continue;
+                    if (options.Length == 0 || ((entry == null || !imeDictionaryInstalled) && options.Any(x => x.Length == 0))) continue;
                     selected = target; readings = options; break;
                 }
                 if (selected == null) { Result = "等待新题目（已发送题目不重试，缺词已记录）"; return null; }
                 word = selected.Text; normalizedWord = WordMatching.Normalize(word);
                 targetPath = selected.Path; targetPriority = selected.Priority;
                 readingIndexes = new int[readings.Length]; characterIndex = 0;
-                characterMode = entry == null; spelling = entry?.Pinyin ?? "";
-                if (characterMode) Fallbacks.Enqueue((normalizedWord, "", "词库无整词，逐字输入"));
+                // Keep dictionary syllables as pronunciation data even without an imported IME word list.
+                characterMode = !imeDictionaryInstalled || entry == null; spelling = entry?.Pinyin ?? "";
+                if (entry == null) Fallbacks.Enqueue((normalizedWord, "", "词库无整词，逐字输入"));
                 HasEnteredGame = true; PrepareUnit(now);
             }
         }
@@ -237,7 +240,7 @@ internal sealed class TrialMachine
     }
     private KeyValuePair<int,string> FindCandidate(TrialView view)
     {
-        if (characterMode)
+        if (characterMode && imeDictionaryInstalled)
         {
             var remaining = normalizedWord[characterIndex..];
             var full = view.Candidates.FirstOrDefault(p => WordMatching.Same(p.Value, remaining));

@@ -522,3 +522,37 @@ Check(!DependencyRules.CanRegisterWithoutTravel(false,false,true),"outside plaza
 Check(DependencyRules.ManualNpcTooltip=="缺少自动寻路功能，请手动前往npc","start hover wording");
 Check(DependencyRules.ManualPlazaMessage=="缺少寻路组件，请手动前往键斗广场","waiting for manual plaza travel wording");
 Console.WriteLine("PASS: solo/leader manual-NPC fallback remains usable without travel dependencies.");
+
+// Without an imported IME vocabulary, known whole words still start directly in character mode.
+var withoutImeList = new TrialMachine(dictionary,0,new Random(50),true,timing,imeDictionaryInstalled:false);
+var forcedBuffer=""; var forcedKeys="";
+for(long now=0;now<10000 && withoutImeList.CompletedCount<2;now+=10)
+{
+ var candidates=new Dictionary<int,string>();
+ if(forcedBuffer=="j") { candidates[1]="计步"; candidates[2]="计"; }
+ if(forcedBuffer=="计b") candidates[3]="步";
+ var key=withoutImeList.Tick(new(true,forcedBuffer,[new($"/char/{withoutImeList.CompletedCount}/20","计，步！")],candidates),now);
+ if(key==null)continue;
+ forcedKeys+=key;
+ if(key is >= 'a' and <= 'z')forcedBuffer+=key;
+ else if(key=='2')forcedBuffer="计";
+ else if(key=='3')forcedBuffer="计步";
+ else if(key=='\n')forcedBuffer="";
+}
+Check(withoutImeList.CompletedCount==2 && forcedKeys=="j2b3\nj2b3\n","no IME list must bypass whole-word candidates and input each character: "+forcedKeys);
+Check(withoutImeList.Fallbacks.Count==0,"known words forced to character mode must not be falsely recorded as missing");
+Check(withoutImeList.ComposedEntries.Count==2,"character composition learning stays available");
+var withImeList = new TrialMachine(dictionary,0,new Random(51),true,timing);
+var installedBuffer="";var installedKeys="";
+for(long now=0;now<3000 && withImeList.CompletedCount<1;now+=10)
+{
+ var candidates=installedBuffer=="j"?new Dictionary<int,string>{{1,"计步"},{2,"计"}}:new();
+ var key=withImeList.Tick(new(true,installedBuffer,[new("/whole/20","计步")],candidates),now);
+ if(key==null)continue;
+ installedKeys+=key;
+ if(key is >= 'a' and <= 'z')installedBuffer+=key;
+ else if(key=='1')installedBuffer="计步";
+ else if(key=='\n')installedBuffer="";
+}
+Check(withImeList.CompletedCount==1 && installedKeys=="j1\n","default installed setting must preserve early whole-word selection");
+Console.WriteLine("PASS: imported IME vocabulary checkbox defaults to existing behavior; unchecked starts each word in strict character mode without whole-word retries.");

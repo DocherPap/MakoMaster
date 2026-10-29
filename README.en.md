@@ -65,8 +65,9 @@ Stop before editing key and word delays, or select a preset:
 | Each key | 40–100 ms | 20–50 ms | 10 ms |
 | Each word | 800–1600 ms | 400–800 ms | 0 ms |
 
-Changes apply when starting. Click **Save settings (保存设置)** to save the timing values. Diga still waits for IME responses and retains dangerous-skill pauses.
+Changes apply when starting. Click **Save settings (保存设置)** to save the timing values; the message beside the button shows the apply/save status. Diga still waits for IME responses and retains dangerous-skill pauses.
 
+- **IME vocabulary installed (输入法已安装词库)** appears before Chat output and is checked by default. Leave it checked if you have imported the word list into your IME: the plugin types whole words or phrases and selects a matching candidate as soon as it appears. Otherwise, uncheck it to start every prompt in character-by-character mode. Stop before changing it; hover for an explanation. This is a manual setting, not automatic detection of installed IME vocabulary.
 - **Chat output (聊天框输出)** is enabled by default. Uncheck it to silence plugin chat messages, including errors.
 - **Save logs (保存日志)** is off by default and resets to off on reload. Check it to save logs and newly learned vocabulary. With saving off, new entries remain available only for the current plugin session. Enable it before reproducing an issue if you need diagnostic logs.
 
