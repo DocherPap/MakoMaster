@@ -35,6 +35,8 @@ public sealed partial class Plugin : IDalamudPlugin
     private VocabularyStore? vocabulary;
     private long nextVocabularySample, nextVocabularyFlush;
     private bool showControlWindow = true;
+    private bool fitControlWindow = true;
+    private bool advancedSettingsExpanded;
     private string lastRunResult = "尚未启动";
     private TimingSettings timingSettings = new();
     private int keyMinMs = 40, keyMaxMs = 100, wordMinMs = 800, wordMaxMs = 1600;
@@ -86,19 +88,33 @@ public sealed partial class Plugin : IDalamudPlugin
         if (chatOutputEnabled) chat.PrintError(message);
     }
 
-    private void ShowControlWindow() => showControlWindow = true;
+    private void ShowControlWindow()
+    {
+        showControlWindow = true;
+        fitControlWindow = true;
+    }
 
     private void DrawControlWindow()
     {
         if (disposed || !showControlWindow) return;
-        ImGui.SetNextWindowSize(new Vector2(320, 0), ImGuiCond.FirstUseEver);
-        var draw = ImGui.Begin("魔光键影控制##MakoMaster", ImGuiWindowFlags.AlwaysAutoResize
-            | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoNavInputs
+        // A zero size asks ImGui to fit content for its next layout passes, then releases manual resizing.
+        if (fitControlWindow)
+        {
+            ImGui.SetNextWindowSize(Vector2.Zero, ImGuiCond.Always);
+            fitControlWindow = false;
+        }
+        ImGui.SetNextWindowSizeConstraints(new Vector2(ControlRowWidth + ImGui.GetStyle().WindowPadding.X * 2, 0), new Vector2(float.MaxValue, float.MaxValue));
+        var draw = ImGui.Begin("魔光键影控制##MakoMaster", ref showControlWindow,
+            ImGuiWindowFlags.HorizontalScrollbar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoNavInputs
             | ImGuiWindowFlags.NoNavFocus | ImGuiWindowFlags.NoFocusOnAppearing);
         try
         {
             if (!draw) return;
-            ImGui.TextUnformatted(OpeningChests ? "正在开箱" : trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
+            // Keep the header in the window layout so its framed sides are not clipped by a fixed table cell.
+            ImGui.PushTextWrapPos(0);
+            try
+            {
+            ImGui.TextUnformatted(OpeningChests ? "正在开箱" : WorldBusy ? "正在传送／寻路／兑换" : trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
             if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
             if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
             if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2.5 秒暂停");
@@ -106,44 +122,51 @@ public sealed partial class Plugin : IDalamudPlugin
             if (inputEnvironmentMessage.Length > 0) ImGui.TextWrapped(inputEnvironmentMessage);
             ImGui.Separator();
             DrawModeControls();
-            if (ImGui.CollapsingHeader("高级设置"))
+            var advancedOpen = ImGui.CollapsingHeader("高级设置");
+            if (advancedOpen != advancedSettingsExpanded)
             {
+                advancedSettingsExpanded = advancedOpen;
+                fitControlWindow = true;
+            }
+            if (advancedOpen)
+            {
+                DrawAutoRedeemSettings();
                 ImGui.BeginDisabled(trial != null);
                 ImGui.TextUnformatted("按键随机间隔（毫秒）");
-                ImGui.SetNextItemWidth(125);
+                ImGui.SetNextItemWidth(NumberInputWidth(4));
                 ImGui.InputInt("##keyMin", ref keyMinMs, 0, 0);
                 ImGui.SameLine();
                 ImGui.TextUnformatted("～"); ImGui.SameLine();
-                ImGui.SetNextItemWidth(125);
+                ImGui.SetNextItemWidth(NumberInputWidth(4));
                 ImGui.InputInt("##keyMax", ref keyMaxMs, 0, 0);
                 ImGui.TextUnformatted("每题随机停顿（毫秒）");
-                ImGui.SetNextItemWidth(125);
+                ImGui.SetNextItemWidth(NumberInputWidth(5));
                 ImGui.InputInt("##wordMin", ref wordMinMs, 0, 0);
                 ImGui.SameLine();
                 ImGui.TextUnformatted("～"); ImGui.SameLine();
-                ImGui.SetNextItemWidth(125);
+                ImGui.SetNextItemWidth(NumberInputWidth(5));
                 ImGui.InputInt("##wordMax", ref wordMaxMs, 0, 0);
                 if (ImGui.Button("保存设置")) OnCommand("", "save-timing");
                 if (timingMessage.Length > 0) ImGui.TextWrapped(timingMessage);
-                if (ImGui.Button("预设：默认")) ApplyTimingPreset(new TimingSettings());
-                ImGui.SameLine();
-                if (ImGui.Button("预设：快速")) ApplyTimingPreset(TimingSettings.FastPreset);
-                ImGui.SameLine();
-                if (ImGui.Button("预设：迪迦")) ApplyTimingPreset(TimingSettings.DigaPreset);
+                DrawTimingPresets();
                 ImGui.EndDisabled();
                 ImGui.Checkbox("聊天框输出", ref chatOutputEnabled);
                 var logSavingChecked = saveLogs;
                 if (ImGui.Checkbox("保存日志", ref logSavingChecked)) OnCommand("", "toggle-logs");
+                DrawDependencyStates();
             }
-            ImGui.BeginDisabled(trial != null || OpeningChests);
-            if (ImGui.Button("开始", new Vector2(135, 36))) OnCommand("", "run-mode");
-            ImGui.EndDisabled(); ImGui.SameLine();
-            ImGui.BeginDisabled(trial == null && capture == null && !OpeningChests);
+            var startDependencyError = GetStartDependencyError();
+            ImGui.BeginDisabled(trial != null || OpeningChests || WorldBusy || worldFault);
+            if (ImGui.Button("开始", new Vector2(ControlButtonWidth, 36))) OnCommand("", "run-mode");
+            ImGui.EndDisabled(); DependencyTooltip(startDependencyError); ImGui.SameLine();
+            ImGui.BeginDisabled(trial == null && capture == null && !OpeningChests && !WorldBusy && !worldFault && !autoRedeem);
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.65f, 0.16f, 0.16f, 1));
-            if (ImGui.Button("停止", new Vector2(135, 36))) OnCommand("", "stop");
+            if (ImGui.Button("停止", new Vector2(ControlButtonWidth, 36))) OnCommand("", "stop");
             ImGui.PopStyleColor();
             ImGui.EndDisabled();
-            if (trial == null && capture == null && !OpeningChests && ImGui.Button("隐藏窗口")) showControlWindow = false;
+            DrawWorldControls();
+            }
+            finally { ImGui.PopTextWrapPos(); }
         }
         finally { ImGui.End(); }
     }
@@ -182,13 +205,23 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var split = args.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         if (split.Length == 0 || split[0] == "ui") { ShowControlWindow(); return; }
+        if (split[0] == "travel-plaza") { StartPlazaTravel(); return; }
+        if (split[0] == "travel-vendor") { StartPlazaTravel(WorldAutomationRules.Vendor); return; }
+        if (split[0] == "redeem-on")
+        {
+            if (!InKeyPlaza) throw new InvalidDataException("只有在键斗广场才能开启自动兑换宝箱。");
+            if (GetDependencyError(true, false) is { } redeemDependencyError) throw new InvalidDataException(redeemDependencyError);
+            if (redeemThreshold < 0) throw new InvalidDataException("兑换阈值不能小于 0。");
+            autoRedeem = true; worldFault = false; return;
+        }
+        if (split[0] == "redeem-off") { StopWorldAutomation(disableRedeem: true); return; }
         if (split[0] == "open-chests") { StartChestOpening(); return; }
         if (split[0] == "stop-chests") { StopChestOpening("手动停止开箱"); return; }
         if (split[0] == "toggle-logs") { SetLogSaving(!saveLogs); return; }
         if (split[0] == "save-timing") { if (trial == null) SaveTimingSettings(); return; }
         if (split[0] == "run-mode")
         {
-            if (trial != null || OpeningChests) return;
+            if (trial != null || OpeningChests || WorldBusy || worldFault) return;
             if (selectedMode == RunMode.Chests) { StartChestOpening(); return; }
             split[0] = "auto";
         }
@@ -196,6 +229,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             if (trial != null) { ShowControlWindow(); PrintChat("[MakoMaster] 已等待或正在输入，请使用控制窗口的停止按钮。"); return; }
             if (OpeningChests) { chestMessage = "请先停止开箱，再启动自动打字或循环。"; return; }
+            if (WorldBusy || worldFault) throw new InvalidDataException("请先停止传送、寻路或兑换操作。");
             SaveTimingSettings(saveLogs);
             var dictionary = vocabulary?.EffectiveDictionary ?? throw new InvalidDataException("词库未能加载，详见卫月日志");
             if (dictionary.Count == 0) throw new InvalidDataException("词库为空");
@@ -252,7 +286,7 @@ public sealed partial class Plugin : IDalamudPlugin
             PrintChat("[MakoMaster] 文件：" + lastCapture);
             return;
         }
-        if (split[0] == "stop") { StopChestOpening("手动停止"); StopTrial("手动停止"); SetLogSaving(false); return; }
+        if (split[0] == "stop") { StopWorldAutomation(disableRedeem: true); StopChestOpening("手动停止"); StopTrial("手动停止"); SetLogSaving(false); return; }
         if (split[0] == "status")
         {
             if (vocabulary != null) PrintChat($"[MakoMaster] 已记录 {vocabulary.SeenCount} 种题目，新增学习 {vocabulary.LearnedCount} 条；可用词库 {vocabulary.EffectiveDictionary.Count} 条。");
@@ -318,11 +352,13 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void OnUpdate(IFramework _)
     {
         if (disposed) return;
+        UpdateDependencyScene(Environment.TickCount64);
         UpdateVocabulary(Environment.TickCount64);
         try
         {
             UpdateChestOpening(Environment.TickCount64);
             keyboard.ReleaseDue(Environment.TickCount64);
+            UpdateWorldAutomation(Environment.TickCount64);
             UpdateTrial(Environment.TickCount64);
         }
         catch (Exception ex) { log.Error(ex, "MakoMaster input paused"); PauseInput("输入暂时异常：" + ex.Message, Environment.TickCount64); }
@@ -462,6 +498,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void UpdateTrial(long now)
     {
         if (trial == null) return;
+        if (worldOwnsInput) { HoldForInputEnvironment(worldMessage, now); return; }
         if (saveLogs && (capture == null || capture.Error != null || captureBacklog.Count > 0))
         { PauseInput("等待开发日志写入恢复", now); return; }
         if (!NativeInput.ForegroundIsGame)
@@ -579,6 +616,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var target = trial?.Target;
         var completed = trial?.CompletedCount ?? 0;
         var wasContinuous = continuousMode;
+        StopWorldAutomation();
         roundLoop = null; loopMessage = ""; skillPause.Reset(); skillPaused = false; lastSkillPauseTick = 0;
         lastRunResult = reason;
         continuousMode = false;
@@ -705,6 +743,7 @@ public sealed partial class Plugin : IDalamudPlugin
         pi.UiBuilder.OpenConfigUi -= ShowControlWindow;
         framework.Update -= OnUpdate;
         DisposeDiagnostics();
+        StopWorldAutomation(disableRedeem: true);
         StopChestOpening("插件卸载");
         StopTrial("插件卸载");
         StopCapture("插件卸载");

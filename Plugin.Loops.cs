@@ -63,7 +63,7 @@ public sealed partial class Plugin
     private long lastSkillPauseTick;
     private readonly HashSet<string> interruptibleSkills = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Skill, long At)> lastCasts = new();
-    private static readonly string[] diagnosticAddons = ["KTGEnterDialogue", "ContentsFinderConfirm", "KTGResult"];
+    private static readonly string[] diagnosticAddons = ["KTGEnterDialogue", "ContentsFinderConfirm", "KTGResult", "SelectString", "SelectIconString", "SelectYesno", "Talk", "ShopExchangeCurrency"];
     private string InterruptibleFile => Path.Combine(pi.AssemblyLocation.DirectoryName!, "interruptible-skills.json");
 
     private void InitializeDiagnostics()
@@ -79,7 +79,9 @@ public sealed partial class Plugin
 
     private unsafe void OnUiEvent(AddonEvent type, AddonArgs args)
     {
-        if (capture == null || args is not AddonReceiveEventArgs ev || (byte)ev.AtkEventType != (byte)AtkEventType.ButtonClick) return;
+        if (capture == null || args is not AddonReceiveEventArgs ev) return;
+        var eventType = (AtkEventType)(byte)ev.AtkEventType;
+        if (eventType is not (AtkEventType.ButtonClick or AtkEventType.ListItemClick or AtkEventType.ListItemSelect or AtkEventType.MouseClick)) return;
         var native = (AtkEvent*)ev.AtkEvent;
         WriteRecord(new { Kind = "UiButtonEvent", At = DateTimeOffset.Now, Addon = args.AddonName,
             EventType = (byte)ev.AtkEventType, ev.EventParam, NodeId = native == null || native->Node == null ? (uint?)null : native->Node->NodeId });
@@ -177,6 +179,8 @@ public sealed partial class Plugin
                 {
                     WriteRecord(new { Kind = "LoopInteraction", At = DateTimeOffset.Now, Npc = loopNpcName, DataId = loopNpcDataId });
                     targetManager.Target = npc;
+                    ownDialogue = true; lastInteractedNpc = EntryNpcBaseId;
+                    nextWorldAction = now + 1200;
                     system->InteractWithObject((GameObject*)npc.Address, false);
                     acted = true;
                 }

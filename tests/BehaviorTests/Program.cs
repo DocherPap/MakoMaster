@@ -445,3 +445,80 @@ foreach(var mode in new[]{RunMode.Solo,RunMode.Leader})
  }
 }
 Console.WriteLine("PASS: four modes, timing presets, independent counts, party role validation and finite round completion.");
+
+Check(!WorldAutomationRules.ShouldRedeem(true,144,10000,9100),"no redemption outside plaza");
+Check(!WorldAutomationRules.ShouldRedeem(false,1360,10000,9100),"redemption requires opt-in");
+Check(!WorldAutomationRules.ShouldRedeem(true,1360,9100,9100),"redemption threshold is strict greater than");
+Check(WorldAutomationRules.ShouldRedeem(true,1360,9101,9100),"redemption above threshold");
+Check(!WorldAutomationRules.ShouldRedeem(true,1360,10000,-1),"reject negative threshold");
+Check(WorldAutomationRules.PurchaseQuantity(10000,500)==10,"spend all points, not just excess threshold");
+Check(WorldAutomationRules.PurchaseQuantity(909,500)==0,"insufficient points");
+Check(WorldAutomationRules.PurchaseQuantity(10000,3)==3,"respect inventory capacity");
+Check(WorldAutomationRules.PurchaseQuantity(1000000,1000)==99,"bounded purchase batch");
+Check(WorldAutomationRules.Receipt(10000,2,900,12,10),"verify exact point and chest receipt");
+Check(!WorldAutomationRules.Receipt(10000,2,900,11,10),"partial receipt cannot repeat purchase");
+Check(!WorldAutomationRules.Receipt(10000,2,1000,12,10),"wrong currency delta rejected");
+Check(WorldAutomationRules.Arrived(new(1,0,1),new(0,0,0)),"NPC interaction distance");
+Check(!WorldAutomationRules.Arrived(new(0,10,0),new(0,0,0)),"different floor is not arrival");
+var pendingNavigation = new NavigationRequestGate();
+pendingNavigation.Begin(); pendingNavigation.RequestStop();
+Check(!pendingNavigation.UpdateStop(true,false) && pendingNavigation.Owned,"keep ownership while pending path computes");
+Check(pendingNavigation.UpdateStop(false,true),"stop path installed after stop click");
+Check(!pendingNavigation.UpdateStop(false,false) && !pendingNavigation.Owned,"release only after path settles");
+Check(!pendingNavigation.UpdateStop(false,true),"do not stop unrelated navigation");
+Console.WriteLine("PASS: plaza-only strict redemption threshold, spend-all quantities, exact receipts, XYZ arrival and late-path cancellation.");
+
+Check(!WorldAutomationRules.ShouldRedeem(true,1360,900,0),"below-price balance cannot repeatedly trigger redemption");
+
+Check(WorldDialogueRules.MenuChoice(WorldAutomationRules.Guide,"前往键斗广场。"),"guide destination option");
+Check(WorldDialogueRules.MenuChoice(WorldAutomationRules.Guide,"进入键斗广场"),"guide entry variant");
+Check(!WorldDialogueRules.MenuChoice(WorldAutomationRules.Guide,"不前往键斗广场"),"reject negative guide choice");
+Check(!WorldDialogueRules.MenuChoice(WorldAutomationRules.Guide,"键斗广场说明"),"do not select explanation");
+Check(WorldDialogueRules.MenuChoice(WorldAutomationRules.Vendor," 其他。 "),"vendor other category punctuation");
+Check(WorldDialogueRules.MenuChoice(WorldDialogueRules.RegistrationNpc,"报名参加魔光键影"),"registration menu");
+Check(WorldDialogueRules.MenuChoice(WorldDialogueRules.RegistrationNpc,"申请参加"),"registration short option");
+Check(!WorldDialogueRules.MenuChoice(WorldDialogueRules.RegistrationNpc,"不参加魔光键影"),"reject negative registration");
+Check(WorldDialogueRules.CanHandle(true,WorldAutomationRules.Guide,null),"cleared target does not lose owned dialogue");
+Check(!WorldDialogueRules.CanHandle(true,WorldAutomationRules.Guide,WorldAutomationRules.Vendor),"changed target does not advance unrelated dialogue");
+Check(!WorldDialogueRules.CanHandle(false,WorldAutomationRules.Guide,null),"do not advance unowned dialogue");
+Check(WorldDialogueRules.ClearOnPlazaArrival(WorldAutomationRules.Guide),"guide interaction ends on plaza arrival");
+Check(!WorldDialogueRules.ClearOnPlazaArrival(WorldAutomationRules.Vendor),"vendor ownership survives plaza updates");
+Check(!WorldDialogueRules.ClearOnPlazaArrival(WorldDialogueRules.RegistrationNpc),"registration ownership survives plaza updates");
+Console.WriteLine("PASS: NPC dialogue choices, negative/description exclusions, cleared targets and plaza session ownership.");
+
+Check(WorldAutomationRules.AtStandingPosition(WorldAutomationRules.EntryStandingPosition,WorldAutomationRules.EntryStandingPosition,new(-12.100403f,.33283907f,-31.296265f)),"recorded registration side point allows interaction beyond old 2.8y limit");
+Check(WorldAutomationRules.AtStandingPosition(WorldAutomationRules.VendorStandingPosition,WorldAutomationRules.VendorStandingPosition,new(8.194031f,0,-29.160034f)),"recorded exchange side point");
+Check(!WorldAutomationRules.AtStandingPosition(new(-9.870851f,.025749326f,-29.448524f),WorldAutomationRules.EntryStandingPosition,new(-12.100403f,.33283907f,-31.296265f)),"old stalled front position is not side-point arrival");
+Check(!WorldAutomationRules.ShouldRedeemWhileQueuing(true,false,1360,10000,9100),"idle and manual travel cannot trigger automatic exchange");
+Check(WorldAutomationRules.ShouldRedeemWhileQueuing(true,true,1360,10000,9100),"automatic queue permits exchange");
+Console.WriteLine("PASS: captured node-less dialogue events, recorded side destinations and queue-only exchange.");
+
+Check(WorldDialogueRules.CanConfirm(true,WorldAutomationRules.Guide,null,"要前往键斗广场吗？",0),"guide yes confirmation belongs to our flow");
+Check(!WorldDialogueRules.CanConfirm(false,WorldAutomationRules.Guide,null,"要前往键斗广场吗？",0),"unowned popup must not be confirmed");
+Check(!WorldDialogueRules.CanConfirm(true,WorldAutomationRules.Guide,null,"要放弃任务吗？",0),"unrelated popup must not be confirmed");
+Check(!WorldDialogueRules.CanConfirm(true,WorldAutomationRules.Vendor,null,"兑换魔光键影宝箱？",0),"no purchase pending: do not confirm vendor popup");
+Check(WorldDialogueRules.CanConfirm(true,WorldAutomationRules.Vendor,null,"兑换魔光键影宝箱？",3),"confirm only pending chest purchase");
+Check(!WorldDialogueRules.CanConfirm(true,WorldAutomationRules.Guide,WorldAutomationRules.Vendor,"要前往键斗广场吗？",0),"changed NPC prevents popup confirmation");
+Console.WriteLine("PASS: confirmation is scoped to owned NPC, prompt subject and pending purchase.");
+
+Check(DependencyRules.Resolve(false,false)==DependencyStatus.NotInstalled,"uninstalled dependency");
+Check(DependencyRules.Resolve(true,false)==DependencyStatus.Disabled,"installed unloaded dependency");
+Check(DependencyRules.Resolve(true,true)==DependencyStatus.Enabled,"loaded dependency");
+Check(DependencyRules.Missing(false,false,DependencyStatus.NotInstalled,DependencyStatus.NotInstalled)==null,"no external dependencies for typing and chest opening");
+Check(DependencyRules.Missing(true,false,DependencyStatus.Enabled,DependencyStatus.NotInstalled)==null,"plaza navigation does not require teleport plugin");
+Check(DependencyRules.Missing(true,true,DependencyStatus.Enabled,DependencyStatus.NotInstalled)!=null,"missing teleport blocks travel from other territory");
+Check(DependencyRules.Missing(true,false,DependencyStatus.Disabled,DependencyStatus.Enabled)!=null,"disabled navigation blocks dependent feature");
+Check(DependencyRules.Missing(true,true,DependencyStatus.Enabled,DependencyStatus.Enabled)==null,"dependencies enabled: feature available");
+Check(!DependencyRules.NeedsTeleport(1360) && !DependencyRules.NeedsTeleport(144) && DependencyRules.NeedsTeleport(128),"teleport dependency is territory specific");
+Check(!DependencyRules.ModeNeedsTravel(RunMode.Member,false) && !DependencyRules.ModeNeedsTravel(RunMode.Chests,false),"independent modes remain available");
+Check(DependencyRules.ModeNeedsTravel(RunMode.Solo,false) && DependencyRules.ModeNeedsTravel(RunMode.Leader,false),"lobby solo and leader require navigation");
+Check(!DependencyRules.ModeNeedsTravel(RunMode.Solo,true),"already inside: typing unaffected by missing travel plugins");
+Console.WriteLine("PASS: installed/disabled/enabled dependency status, feature gating and territory-specific teleport requirements.");
+
+Check(DependencyRules.CanRegisterWithoutTravel(true,false,true),"missing travel dependencies must not block nearby registration NPC");
+Check(DependencyRules.CanRegisterWithoutTravel(true,true,false),"an open registration window requires no navigation");
+Check(!DependencyRules.CanRegisterWithoutTravel(true,false,false),"no accessible NPC: wait for manual movement");
+Check(!DependencyRules.CanRegisterWithoutTravel(false,false,true),"outside plaza: do not use unrelated NPCs");
+Check(DependencyRules.ManualNpcTooltip=="缺少自动寻路功能，请手动前往npc","start hover wording");
+Check(DependencyRules.ManualPlazaMessage=="缺少寻路组件，请手动前往键斗广场","waiting for manual plaza travel wording");
+Console.WriteLine("PASS: solo/leader manual-NPC fallback remains usable without travel dependencies.");

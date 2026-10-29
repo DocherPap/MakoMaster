@@ -3,7 +3,7 @@
     "Author": "DocherPap",
     "Name": "MakoMaster",
     "InternalName": "MakoMaster",
-    "AssemblyVersion": "2.0.0.0",
+    "AssemblyVersion": "2.1.10.0",
     "Description": "魔光键影自动输入与持续循环。启动时尝试切换中文输入法，运行中维护小游戏输入框焦点，停止后解除；护盾与读条优先，危险技能暂停，文件保存默认关闭。",
     "Punchline": "魔光键影自动输入与循环游玩",
     "ApplicableVersion": "any",
@@ -11,12 +11,12 @@
     "LoadRequiredState": 0,
     "LoadSync": false,
     "CanUnloadAsync": false,
-    "Changelog": "2.0：四种运行模式；聊天框输出与保存日志统一为选项框；精简模式说明和聊天提示。",
+    "Changelog": "2.1.10：高级设置栏自适应窗口宽度并修复边框裁切；自动兑换按选项框和说明两列对齐，不可用时整组变暗。",
+    "RepoUrl": "https://github.com/DocherPap/MakoMaster",
+    "LastUpdate": 1793267014,
     "IsHide": false,
-    "LastUpdate": 1793260732,
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-2.0.0.0.zip",
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-2.0.0.0.zip",
-    "IsTestingExclusive": false,
-    "RepoUrl": "https://github.com/DocherPap/MakoMaster"
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-2.1.10.0.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/DocherPap/MakoMaster/main/dist/MakoMaster-2.1.10.0.zip",
+    "IsTestingExclusive": false
   }
 ]

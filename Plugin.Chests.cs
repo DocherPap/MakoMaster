@@ -25,6 +25,7 @@ public sealed partial class Plugin
     }
     private void StartChestOpening()
     {
+        if (WorldBusy || worldFault) { chestMessage = "请先停止传送、寻路或兑换操作。"; return; }
         if (trial != null) { chestMessage = "请先停止自动打字或循环，再开启宝箱。"; return; }
         if (OpeningChests) return;
         if (chestCount < 0) { chestMessage = "开启数量不能小于 0；填 0 表示一直开。"; return; }
