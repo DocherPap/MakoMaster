@@ -20,7 +20,7 @@ internal sealed class TrialMachine
     private Stage stage;
     private string word = "", normalizedWord = "", spelling = "", expected = "", prefix = "", desired = "";
     private string pageBefore = "", clearBefore = "", expectedCommit = "";
-    private long nextActionAt, changedAt;
+    private long nextActionAt, changedAt, nextKeyAllowedAt;
     private int sent, turns, unchangedPages, characterIndex;
     private bool characterMode;
     private string[][] readings = [];
@@ -33,7 +33,7 @@ internal sealed class TrialMachine
     internal bool Finished => stage == Stage.Done;
     internal string Result { get; private set; } = "等待小游戏与题目";
     internal string Target => word;
-    internal void ExtendWait(long milliseconds) { nextActionAt += milliseconds; changedAt += milliseconds; }
+    internal void ExtendWait(long milliseconds) { nextActionAt += milliseconds; changedAt += milliseconds; nextKeyAllowedAt += milliseconds; }
     internal Queue<(string Word, string Pinyin, string Reason)> Fallbacks { get; } = new();
     internal Queue<DictionaryEntry> ComposedEntries { get; } = new();
     internal TrialMachine(IReadOnlyDictionary<string, DictionaryEntry> dictionary, long now, Random? timingRandom = null, bool continuous = false, TimingSettings? timings = null)
@@ -46,9 +46,18 @@ internal sealed class TrialMachine
     internal void PauseForScene(string reason, long now)
     {
         if (Finished) return;
-        stage = Stage.Idle; sent = 0; expected = ""; nextActionAt = now; Result = reason;
+        stage = Stage.Idle; sent = 0; expected = ""; nextActionAt = Math.Max(nextActionAt, now); Result = reason;
     }
     internal char? Tick(TrialView view, long now)
+    {
+        if (Finished) return null;
+        if (!view.Ready) { PauseForScene("等待下一关 / 小游戏输入界面", now); return null; }
+        if (now < nextKeyAllowedAt) return null;
+        var key = TickCore(view, now);
+        if (key != null) nextKeyAllowedAt = Math.Max(now + timings.KeyMinMs, nextActionAt);
+        return key;
+    }
+    private char? TickCore(TrialView view, long now)
     {
         if (Finished) return null;
         if (!view.Ready) { PauseForScene("等待下一关 / 小游戏输入界面", now); return null; }
@@ -56,25 +65,12 @@ internal sealed class TrialMachine
         var buffer = WordMatching.InputBuffer(view.Buffer);
         foreach (var path in submitted.Where(p => !view.Words.Any(w => w.Path == p.Key && WordMatching.Same(w.Text, p.Value))).Select(p => p.Key).ToArray())
             submitted.Remove(path);
-        // A newly available cast/shield bypasses the ordinary between-word delay.
-        // This uses only live priority, never the cast's remaining time or pause window.
-        if (stage is Stage.Idle or Stage.AfterSubmit or Stage.Clear or Stage.ClearWait)
-        {
-            var urgentWaiting = view.Words.Any(w => CanPrioritize(w, now));
-            if (urgentWaiting)
-            {
-                if (stage == Stage.AfterSubmit && buffer.Length == 0) FinishAttempt(now);
-                if (stage == Stage.Idle) nextActionAt = now;
-                if (stage is Stage.Clear or Stage.ClearWait && clearDestination == ClearDestination.Idle)
-                    clearDestination = ClearDestination.Priority;
-            }
-        }
+        if (now < nextActionAt) return null;
         if (stage is Stage.Typing or Stage.Search or Stage.PageWait or Stage.ChooseWait)
         {
             var current = view.Words.FirstOrDefault(w => w.Path == targetPath && WordMatching.Same(w.Text, word));
             if (current != null) targetPriority = current.Priority;
-            foreach (var urgent in view.Words.Where(w => double.IsFinite(w.DistanceSquared) && w.Priority > targetPriority)
-                .OrderByDescending(w => w.Priority).ThenBy(w => w.DistanceSquared))
+            foreach (var urgent in WordPriority.Order(view.Words.Where(w => w.Priority > targetPriority)))
             {
                 var key = WordMatching.Normalize(urgent.Text);
                 if (submitted.TryGetValue(urgent.Path, out var sentWord) && sentWord == key) continue;
@@ -94,7 +90,7 @@ internal sealed class TrialMachine
             else
             {
                 DictionaryEntry? entry = null; TrialWord? selected = null;
-                foreach (var target in view.Words.Where(w => double.IsFinite(w.DistanceSquared)).OrderByDescending(w => w.Priority).ThenBy(w => w.DistanceSquared))
+                foreach (var target in WordPriority.Order(view.Words))
                 {
                     var key = WordMatching.Normalize(target.Text);
                     if (submitted.TryGetValue(target.Path, out var sentWord) && sentWord == key) continue;
@@ -203,7 +199,7 @@ internal sealed class TrialMachine
             if (view.Buffer.Length == 0)
             {
                 if (clearDestination == ClearDestination.Characters) { characterMode = true; characterIndex = 0; PrepareUnit(now); }
-                else { stage = Stage.Idle; nextActionAt = clearDestination == ClearDestination.Priority ? now : now + timings.NextWord(random); }
+                else { stage = Stage.Idle; nextActionAt = now + timings.NextWord(random); }
                 return null;
             }
             clearBefore = view.Buffer; stage = Stage.ClearWait; changedAt = now; nextActionAt = now + timings.NextKey(random); return '\b';
@@ -255,15 +251,6 @@ internal sealed class TrialMachine
         if (readingIndexes[characterIndex] + 1 < readings[characterIndex].Length)
         { readingIndexes[characterIndex]++; BeginClear(ClearDestination.Characters, now, "更换读音后逐字重试"); }
         else { skipUntil[normalizedWord] = now + 15000; BeginClear(ClearDestination.Idle, now, "当前字候选未找到，清空后处理其他题目"); }
-    }
-    private bool CanPrioritize(TrialWord target, long now)
-    {
-        if (target.Priority <= 0 || !double.IsFinite(target.DistanceSquared)) return false;
-        var key = WordMatching.Normalize(target.Text);
-        if (submitted.TryGetValue(target.Path, out var sentWord) && sentWord == key) return false;
-        if (skipUntil.TryGetValue(key, out var until) && until > now) return false;
-        var options = ReadingsFor(target.Text, FindEntry(target.Text));
-        return options.Length > 0 && options.All(r => r.Length > 0);
     }
     private DictionaryEntry? FindEntry(string text)
     {

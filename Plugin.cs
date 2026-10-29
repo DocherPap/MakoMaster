@@ -490,9 +490,9 @@ public sealed partial class Plugin : IDalamudPlugin
         var skills = new Dictionary<string,string>();
         foreach (var row in casting?.Nodes.Where(n => n.Visible && n.NodeId == 4 && n.Text.Length > 0) ?? [])
             skills[WordMatching.Slot(row.Path)] = row.Text;
-        var observations = words.Nodes.Where(n => n.NodeId == 20 && float.IsFinite(n.ScreenX) && float.IsFinite(n.ScreenY))
+        var observations = words.Nodes.Where(n => n.NodeId == 20)
             .Select(n => new WordObservation(n.Path, n.Text, n.Visible, n.ContainerVisible,
-                Math.Pow(n.ScreenX - clientWidth * 0.5, 2) + Math.Pow(n.ScreenY - clientHeight, 2), n.TextColor));
+                WordPriority.SafeDistance(Math.Pow(n.ScreenX - clientWidth * 0.5, 2) + Math.Pow(n.ScreenY - clientHeight, 2)), n.TextColor));
         var targets = wordResolver.Resolve(observations, vocabulary?.EffectiveDictionary ?? new Dictionary<string,DictionaryEntry>(), skills, interruptibleSkills, ReadCastKinds(casting));
         var page = input!.Nodes.FirstOrDefault(n => n.Path == "/7[4]/14[7]" && n.Visible)?.Text ?? "";
         var pageMatch = System.Text.RegularExpressions.Regex.Match(page, @"\((\d+)/(\d+)\)");

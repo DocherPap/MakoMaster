@@ -11,6 +11,14 @@ internal static class WordMatching
     internal static bool KnownInterruptibleSkill(string skill) => Same(skill, "？针刺") || Same(skill, "霹雳炸弹") || Same(skill, "黏菌爆发");
     internal static string Slot(string path) { var next = path.IndexOf('/', 1); return next < 0 ? path : path[..next]; }
 }
+internal static class WordPriority
+{
+    internal const int Normal = 0, Uninterruptible = 1, Interruptible = 2, Barrier = 3;
+    internal static double SafeDistance(double distance) => double.IsFinite(distance) && distance >= 0 ? distance : double.MaxValue;
+    // Global tiers are compared first. Distance can never outweigh a higher tier.
+    internal static IOrderedEnumerable<TrialWord> Order(IEnumerable<TrialWord> words)
+        => words.OrderByDescending(w => w.Priority).ThenBy(w => SafeDistance(w.DistanceSquared));
+}
 internal sealed record WordObservation(string Path, string Text, bool TextVisible, bool ContainerVisible, double DistanceSquared, uint TextColor = 0xFFFFFFFF);
 internal sealed class WordResolver
 {
@@ -48,7 +56,8 @@ internal sealed class WordResolver
             var canInterrupt = interruptibleSlots != null && interruptibleSlots.TryGetValue(slot, out var liveFlag)
                 ? liveFlag : skill != null && interruptible?.Contains(skill) == true;
             if (skill != null && WordMatching.KnownInterruptibleSkill(skill)) canInterrupt = true;
-            var priority = barriers.ContainsKey(slot) ? 3 : skill == null ? 0 : canInterrupt ? 2 : 1;
+            var priority = barriers.ContainsKey(slot) ? WordPriority.Barrier : skill == null ? WordPriority.Normal
+                : canInterrupt ? WordPriority.Interruptible : WordPriority.Uninterruptible;
             result.Add(new(item.Path, text, item.DistanceSquared, priority, skill ?? "", obscured));
         }
         return result;

@@ -289,30 +289,7 @@ memoryOnly.PersistenceEnabled=false;memoryOnly.RecordFallback("近","jin","关�
 Check(File.ReadAllText(Path.Combine(disabledFolder,"fallback-words.json"))==savedContents,"turning saving off still changed a file");
 Console.WriteLine("PASS: files/directories are absent by default; learning stays in memory; opt-in persists; opt-out stops writes.");
 
-// Higher tiers appearing mid-word preempt immediately, even during a key delay.
-var preempt=new TrialMachine(dictionary,0,new Random(1),true,timing);
-var normalWord=new TrialWord("/ordinary/20","近",1,0);
-var interruptWord=new TrialWord("/interrupt/20","计步",9999,2,"自爆");
-var shieldWord=new TrialWord("/shield/20","计数",99999,3);
-Check(preempt.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0)=='j',"preemption setup did not start normal word");
-Check(preempt.Tick(new(true,"j",[normalWord,interruptWord],new Dictionary<int,string>()),20)=='\b',"new interruptible cast waited for the normal word or its timer");
-preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),120);
-preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),130);
-Check(preempt.Tick(new(true,"",[normalWord,interruptWord],new Dictionary<int,string>()),140)=='j' && preempt.Target=="计步","interruptible cast was not selected immediately after clearing");
-Check(preempt.Tick(new(true,"j",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),150)=='\b',"new shield did not preempt an interruptible cast");
-preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),250);
-preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),260);
-Check(preempt.Tick(new(true,"",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),270)=='j' && preempt.Target=="计数","shield did not become the selected target");
-Check(preempt.CompletedCount==0,"abandoned partial inputs were counted as sent");
-Check(preempt.Tick(new(true,"j",[normalWord,interruptWord,shieldWord],new Dictionary<int,string>()),370)=='i',"lower-tier cast preempted an active shield");
-var equalTier=new TrialMachine(dictionary,0,new Random(1),true,timing);
-Check(equalTier.Tick(new(true,"",[new("/far/20","计步",9999,1)],new Dictionary<int,string>()),0)=='j',"equal-tier setup");
-Check(equalTier.Tick(new(true,"j",[new("/far/20","计步",9999,1),new("/near/20","近",1,1)],new Dictionary<int,string>()),100)=='i' && equalTier.Target=="计步","same-tier distance change caused a mid-word switch");
-var untypable=new TrialMachine(dictionary,0,new Random(1),true,timing);
-untypable.Tick(new(true,"",[normalWord],new Dictionary<int,string>()),0);
-Check(untypable.Tick(new(true,"j",[normalWord,new("/missing/20","龘",0,3)],new Dictionary<int,string>()),100)=='i',"unreadable urgent word caused an endless clear/restart");
-Check(SkillPauseGate.BeforeMs==1000 && SkillPauseGate.AfterMs==2500,"dangerous-skill pause interval constants wrong");
-Console.WriteLine("PASS: normal-to-cast and cast-to-shield preemption during pending delays; no same-tier thrashing; unreadable-target guard; pause ends 2.5 seconds after cast.");
+PriorityTimingTests.Run();
 
 // Confirmed skill classification survives transient hidden interrupt markers.
 var needleWords=new WordResolver().Resolve([
@@ -366,33 +343,6 @@ Console.WriteLine("PASS: in-game loop startup; NPC/entry evidence overrides stal
 InputLanguageTests.Run();
 
 ChestOpeningTests.Run();
-
-// Cast priority begins on detection, even with almost the full cast duration left.
-var earlyCastWords=new WordResolver().Resolve([
-    new("/normal/20","近",true,true,0),new("/interruptible/20","计步",true,true,9999),new("/ordinarycast/20","计数",true,true,999)
-],dictionary,new Dictionary<string,string>{{"/interruptible","？针刺"},{"/ordinarycast","其他读条"}},new HashSet<string>(),new Dictionary<string,bool>{{"/interruptible",false},{"/ordinarycast",false}});
-Check(earlyCastWords.Single(w=>w.Text=="计步").Priority==2 && earlyCastWords.Single(w=>w.Text=="计数").Priority==1,"early cast did not immediately raise priority");
-Check(!new SkillPauseGate().Tick([new("/different","诅咒视线",10,0.01)],0),"cast-priority detection incorrectly invoked the end-of-cast pause");
-foreach(var priority in new[]{1,2})
-{
-    var cooldownTiming=new TimingSettings(100,100,1600,1600);
-    var machine=new TrialMachine(dictionary,0,new Random(1),true,cooldownTiming);
-    var ordinary=new TrialWord("/normal/20","近",0);
-    Check(machine.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),0)=='j',"cooldown bypass setup");
-    Check(machine.Tick(new(true,"j",[ordinary],new Dictionary<int,string>{{1,"近"}}),100)=='1',"cooldown bypass setup candidate");
-    Check(machine.Tick(new(true,"近",[ordinary],new Dictionary<int,string>()),300)=='\n',"cooldown bypass setup submit");
-    machine.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),550); // ordinary delay would end at 2150
-    var cast=new TrialWord("/newcast/20","计步",9999,priority,"新读条");
-    Check(machine.Tick(new(true,"",[ordinary,cast],new Dictionary<int,string>()),600)=='j' && machine.Target=="计步",
-        "new cast waited for ordinary word delay: priority="+priority);
-    var settle=new TrialMachine(dictionary,0,new Random(1),true,cooldownTiming);
-    settle.Tick(new(true,"",[ordinary],new Dictionary<int,string>()),0);
-    settle.Tick(new(true,"j",[ordinary],new Dictionary<int,string>{{1,"近"}}),100);
-    settle.Tick(new(true,"近",[ordinary],new Dictionary<int,string>()),300);
-    Check(settle.Tick(new(true,"",[ordinary,cast],new Dictionary<int,string>()),350)=='j' && settle.Target=="计步",
-        "confirmed empty buffer after send still delayed the new cast");
-}
-Console.WriteLine("PASS: interruptible and ordinary cast priority starts at detection; urgent words bypass ordinary delays; end-of-cast pause stays independent.");
 
 Check(TimingSettings.FastPreset==new TimingSettings(20,50,400,800) && TimingSettings.FastPreset.ValidationError==null,"fast preset is not half of defaults");
 Check(new TimingSettings()==new TimingSettings(40,100,800,1600),"fast preset changed defaults");
