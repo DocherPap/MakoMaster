@@ -6,6 +6,8 @@ public sealed partial class Plugin
     private bool autoStartOnEntry = true;
     private long nextAutoEntryCheck;
     private uint autoEntryTerritory;
+    private uint learningGameTerritory;
+    private bool learningGameActive;
     private string AutoEntryFile => Path.Combine(pi.GetPluginConfigDirectory(), "auto-entry.json");
 
     private void UpdateAutoEntry(long now)
@@ -17,7 +19,19 @@ public sealed partial class Plugin
         var home = !loading && (ReadNamedAddon("KTGEnterDialogue") != null || FindEntryNpc() != null);
         var leftGame = !loading && autoEntryTerritory != 0 && clientState.TerritoryType != autoEntryTerritory;
         var ended = !loading && (ReadNamedAddon("KTGResult") != null || home || leftGame);
-        var action = autoEntrySession.Tick(autoStartOnEntry, !loading && IsMinigameInProgress(), ended,
+        var game = !loading && IsMinigameInProgress();
+        if (learningGameActive && (!clientState.IsLoggedIn || !loading &&
+            (home || ReadNamedAddon("KTGResult") != null || clientState.TerritoryType != learningGameTerritory)))
+        {
+            vocabulary?.CompleteGameLearning();
+            learningGameActive = false;
+        }
+        if (game && !learningGameActive)
+        {
+            vocabulary?.BeginGameLearning();
+            learningGameActive = true; learningGameTerritory = clientState.TerritoryType;
+        }
+        var action = autoEntrySession.Tick(autoStartOnEntry, game, ended,
             trial != null || OpeningChests || WorldBusy || worldFault || vocabulary == null, canRearm: home || leftGame);
         if (action == AutoEntryAction.Stop)
         {
@@ -33,8 +47,7 @@ public sealed partial class Plugin
             roundLoop = null; loopMessage = "";
             continuousMode = true;
             ResetInputEnvironment();
-            trial = new TrialMachine(dictionary, now, continuous: true, timings: timingSettings,
-                imeDictionaryInstalled: imeDictionaryInstalled);
+            trial = new TrialMachine(dictionary, now, continuous: true, timings: timingSettings);
             autoEntryTerritory = clientState.TerritoryType;
             trialEarliest = now + 3000; nextTrialSample = 0;
             lastTrialState = lastWaitPhase = "";

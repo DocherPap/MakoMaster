@@ -62,6 +62,17 @@ internal static class RuntimeLearningTests
         observed.Observe(new(true,"",[new("/other","近")],new Dictionary<int,string>()),at.AddMilliseconds(200));
         Check(Count(observedFolder)==1,"observed confirmed learning did not save immediately");
 
+        var delayedFolder=Path.Combine(root,"end-of-game");
+        var delayed=new VocabularyStore(delayedFolder);
+        delayed.BeginGameLearning();
+        delayed.LearnComposition(Entry("计步","ji","bu"));
+        delayed.Flush();
+        Check(delayed.EffectiveDictionary.ContainsKey("计步") && !File.Exists(Path.Combine(delayedFolder,"learned-dictionary.json")),"game learning saved before settlement");
+        delayed.BeginGameLearning(); // Next wave must not reset the pending set.
+        delayed.LearnComposition(Entry("近","jin"));
+        delayed.CompleteGameLearning();
+        Check(Count(delayedFolder)==2,"end-of-game learning was not saved cumulatively");
+
         var settingsFile=Path.Combine(root,"prefs","auto-entry.json");
         Check(AutoEntrySettings.Load(settingsFile).Enabled,"auto-entry not enabled by default");
         new AutoEntrySettings(false).Save(settingsFile);

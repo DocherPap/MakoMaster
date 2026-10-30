@@ -45,7 +45,6 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Queue<object> captureBacklog = new();
     private bool saveLogs;
     private bool chatOutputEnabled = true;
-    private bool imeDictionaryInstalled = true;
     private string TimingFile => Path.Combine(pi.AssemblyLocation.DirectoryName!, "timing-settings.json");
 
     public Plugin(IDalamudPluginInterface pi, ICommandManager commands,
@@ -121,13 +120,6 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.PushTextWrapPos(0);
             try
             {
-            ImGui.TextUnformatted(OpeningChests ? "正在开箱" : WorldBusy ? "正在传送／寻路／兑换" : trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
-            if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
-            if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
-            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2.5 秒暂停");
-            if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
-            if (inputEnvironmentMessage.Length > 0) ImGui.TextWrapped(inputEnvironmentMessage);
-            ImGui.Separator();
             DrawModeControls();
             var advancedOpen = ImGui.CollapsingHeader("高级设置");
             if (advancedOpen != advancedSettingsExpanded)
@@ -163,11 +155,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (timingMessage.Length > 0) { ImGui.SameLine(); ImGui.TextUnformatted(timingMessage); }
                 DrawTimingPresets();
                 ImGui.EndDisabled();
-                ImGui.BeginDisabled(trial != null);
-                ImGui.Checkbox("输入法已安装词库", ref imeDictionaryInstalled);
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("如果已经安装，输入时会直接整词句输入并提前选择符合的词句；否则会一个字一个字输入。");
-                ImGui.EndDisabled();
-                ImGui.Checkbox("聊天框输出", ref chatOutputEnabled);
+                ImGui.Checkbox("聊天框输出日志", ref chatOutputEnabled);
                 var logSavingChecked = saveLogs;
                 if (ImGui.Checkbox("保存日志", ref logSavingChecked)) OnCommand("", "toggle-logs");
                 DrawDependencyStates();
@@ -182,6 +170,18 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.PopStyleColor();
             ImGui.EndDisabled();
             DrawWorldControls();
+            ImGui.Separator();
+            var statusStartY = ImGui.GetCursorPosY();
+            ImGui.TextUnformatted(OpeningChests ? "正在开箱" : WorldBusy ? "正在传送／寻路／兑换" : trial == null ? "已停止" : $"已启动  ·  已发送 {trial.CompletedCount} 词");
+            if (trial != null || lastRunResult != "尚未启动") ImGui.TextWrapped(trial?.Result ?? lastRunResult);
+            if (roundLoop != null) ImGui.TextWrapped(roundLoop.Status);
+            if (skillPaused) ImGui.TextWrapped("运动体探知干扰器 / 诅咒视线：读条结束前 1 秒至结束后 2.5 秒暂停");
+            if (loopMessage.Length > 0) ImGui.TextWrapped(loopMessage);
+            if (inputEnvironmentMessage.Length > 0) ImGui.TextWrapped(inputEnvironmentMessage);
+            // Reserve three status lines when fitting, so routine output does not crowd the controls.
+            var statusSpace = ImGui.GetTextLineHeightWithSpacing() * 3 - (ImGui.GetCursorPosY() - statusStartY);
+            if (statusSpace > 0) ImGui.Dummy(new Vector2(0, statusSpace));
+
             }
             finally { ImGui.PopTextWrapPos(); }
         }
@@ -264,7 +264,7 @@ public sealed partial class Plugin : IDalamudPlugin
             continuousMode = split[0] != "test";
             captureUntil = continuousMode ? long.MaxValue : Math.Max(captureUntil, Environment.TickCount64 + 180000);
             ResetInputEnvironment();
-            trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings, imeDictionaryInstalled: imeDictionaryInstalled);
+            trial = new TrialMachine(dictionary, Environment.TickCount64, continuous: continuousMode, timings: timingSettings);
             trialEarliest = Environment.TickCount64 + 3000;
             nextTrialSample = 0;
             lastTrialState = "";
@@ -274,7 +274,7 @@ public sealed partial class Plugin : IDalamudPlugin
             skillPause.Reset(); skillPaused = false; lastSkillPauseTick = 0;
             showControlWindow = true;
             WriteRecord(new { Kind = "InputMode", At = DateTimeOffset.Now, Continuous = continuousMode,
-                TimingSettings = timingSettings, ImeDictionaryInstalled = imeDictionaryInstalled,
+                TimingSettings = timingSettings,
                 LoopCount = roundLoop?.Limit, Npc = loopNpcName, NpcDataId = loopNpcDataId,
                 Priority = "green barrier > confirmed interruptible cast > other cast > normal; distance within tier", AnchorX = 0.5, AnchorY = 1.0 });
             PrintChat($"[MakoMaster] 词库 {dictionary.Count} 条。{(continuousMode ? "连续模式" : "一题试打")}已待命，三秒后开始检查；使用控制窗口按钮停止。");
@@ -370,10 +370,10 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (disposed) return;
         UpdateDependencyScene(Environment.TickCount64);
-        UpdateVocabulary(Environment.TickCount64);
         try
         {
             UpdateAutoEntry(Environment.TickCount64);
+            UpdateVocabulary(Environment.TickCount64);
             UpdateChestOpening(Environment.TickCount64);
             keyboard.ReleaseDue(Environment.TickCount64);
             UpdateWorldAutomation(Environment.TickCount64);
@@ -765,7 +765,7 @@ public sealed partial class Plugin : IDalamudPlugin
         StopChestOpening("插件卸载");
         StopTrial("插件卸载");
         StopCapture("插件卸载");
-        try { vocabulary?.Flush(); }
+        try { vocabulary?.CompleteGameLearning(); }
         catch (Exception ex) { log.Error(ex, "MakoMaster vocabulary flush failed"); }
         commands.RemoveHandler("/makomaster");
     }

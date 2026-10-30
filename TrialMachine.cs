@@ -23,11 +23,11 @@ internal sealed class TrialMachine
     private string pageBefore = "", clearBefore = "", expectedCommit = "";
     private long nextActionAt, changedAt, nextKeyAllowedAt;
     private int sent, turns, unchangedPages, characterIndex;
-    private bool characterMode;
+    private bool characterMode, retainedComposition, inferredWhole;
+    private string retainedTail = "";
     private string[][] readings = [];
     private int[] readingIndexes = [];
     private readonly HashSet<string> visitedPages = new();
-    private const int WholeWordPageTurns = 3;
     private ClearDestination clearDestination;
     internal int CompletedCount { get; private set; } // submissions, not verified kills
     internal bool HasEnteredGame { get; private set; }
@@ -125,8 +125,10 @@ internal sealed class TrialMachine
                 targetPath = selected.Path; targetPriority = selected.Priority;
                 readingIndexes = new int[readings.Length]; characterIndex = 0;
                 // Keep dictionary syllables as pronunciation data even without an imported IME word list.
-                characterMode = !imeDictionaryInstalled || entry == null; spelling = entry?.Pinyin ?? "";
-                if (entry == null) Fallbacks.Enqueue((normalizedWord, "", "词库无整词，逐字输入"));
+                characterMode = !imeDictionaryInstalled;
+                inferredWhole = entry == null;
+                spelling = entry?.Pinyin ?? string.Concat(readings.Select(r => r[0]));
+                if (entry == null) Fallbacks.Enqueue((normalizedWord, "", "词库无整词，使用已知字音输入"));
                 HasEnteredGame = true; PrepareUnit(now);
             }
         }
@@ -134,7 +136,11 @@ internal sealed class TrialMachine
         {
             if (!string.Equals(buffer, expected, StringComparison.OrdinalIgnoreCase))
             {
-                if (now - changedAt > 2000 + timings.KeyMaxMs) BeginClear(characterMode ? ClearDestination.Idle : ClearDestination.Characters, now, "输入反馈不符，重建输入");
+                if (now - changedAt > 2000 + timings.KeyMaxMs)
+                {
+                    if (characterMode) BeginClear(ClearDestination.Idle, now, "输入反馈不符，重建输入");
+                    else Result = "保留拼音，等待输入反馈恢复";
+                }
                 return null;
             }
             if (sent > 0)
@@ -155,22 +161,17 @@ internal sealed class TrialMachine
         {
             var candidate = FindCandidate(view);
             if (candidate.Key is >= 1 and <= 9) return Choose(candidate.Key, candidate.Value, now);
-            var maxTurns = characterMode ? Math.Clamp(view.TotalPages > 0 ? view.TotalPages : 64, 1, 256) : WholeWordPageTurns;
-            if (turns >= maxTurns || unchangedPages >= 2)
+            if (characterMode)
             {
-                if (!characterMode)
-                {
-                    Fallbacks.Enqueue((normalizedWord, spelling, "首页及后续三页均无整词候选"));
-                    BeginClear(ClearDestination.Characters, now, "整词翻页后仍未找到，已记录，清空后逐字输入");
-                }
-                else NextReadingOrSkip(now);
-                return null;
+                var maxTurns = Math.Clamp(view.TotalPages > 0 ? view.TotalPages : 64, 1, 256);
+                if (turns >= maxTurns || unchangedPages >= 2) { NextReadingOrSkip(now); return null; }
             }
             pageBefore = Fingerprint(view);
-            if (!visitedPages.Add(pageBefore) && characterMode && turns > 0) { NextReadingOrSkip(now); return null; }
+            if (characterMode && !visitedPages.Add(pageBefore) && turns > 0) { NextReadingOrSkip(now); return null; }
             turns++; stage = Stage.PageWait; changedAt = now;
             nextActionAt = now + Math.Max(150, timings.NextKey(random));
-            Result = characterMode ? $"逐字查找 {desired}，翻页 {turns}" : $"整词候选翻页 {turns}/{WholeWordPageTurns}";
+            Result = characterMode ? $"逐字查找 {desired}，翻页 {turns}"
+                : $"保留整串拼音，查找 {normalizedWord[characterIndex]}，翻页 {turns}";
             return '\f';
         }
         if (stage == Stage.PageWait)
@@ -181,14 +182,27 @@ internal sealed class TrialMachine
         }
         if (stage == Stage.ChooseWait)
         {
+            if (retainedComposition)
+            {
+                if (string.Equals(buffer, expectedCommit + retainedTail, StringComparison.OrdinalIgnoreCase))
+                {
+                    characterIndex = expectedCommit.Length;
+                    if (characterIndex >= normalizedWord.Length) return Submit(now);
+                    prefix = expectedCommit; desired = normalizedWord[characterIndex..];
+                    expected = buffer;
+                    turns = unchangedPages = 0; visitedPages.Clear();
+                    stage = Stage.Search; nextActionAt = now + Math.Max(200, timings.NextKey(random));
+                    Result = $"保留剩余拼音，继续选字 {characterIndex + 1}/{normalizedWord.Length}：{word}";
+                }
+                else if (buffer.Length == 0 && !view.Words.Any(w => WordMatching.Same(w.Text, word)))
+                    return Submit(now, learn: false);
+                else if (now - changedAt > 2000 + timings.KeyMaxMs)
+                    Result = "保留拼音，等待选字反馈";
+                return null;
+            }
             if (WordMatching.Same(buffer, expectedCommit))
             {
                 if (characterMode && ++characterIndex < normalizedWord.Length) { PrepareUnit(now); return null; }
-                if (characterMode)
-                {
-                    var syllables = readings.Select((r, i) => r[readingIndexes[i]]).ToArray();
-                    ComposedEntries.Enqueue(new(normalizedWord, syllables, string.Concat(syllables), string.Join("'", syllables)));
-                }
                 return Submit(now);
             }
             if (buffer.Length == 0 && !view.Words.Any(w => WordMatching.Same(w.Text, word)))
@@ -199,7 +213,7 @@ internal sealed class TrialMachine
             }
             if (now - changedAt > 2000 + timings.KeyMaxMs)
             {
-                if (!characterMode) BeginClear(ClearDestination.Characters, now, "选词反馈不符，逐字重试"); else NextReadingOrSkip(now);
+                if (!characterMode) Result = "保留拼音，等待选词反馈"; else NextReadingOrSkip(now);
             }
             return null;
         }
@@ -229,11 +243,19 @@ internal sealed class TrialMachine
     }
     private char Choose(int key, string text, long now)
     {
-        expectedCommit = prefix + desired; stage = Stage.ChooseWait; changedAt = now;
+        expectedCommit = prefix + desired;
+        retainedTail = retainedComposition
+            ? string.Concat(readings.Skip(expectedCommit.Length).Select((r, offset) => r[readingIndexes[expectedCommit.Length + offset]])) : "";
+        stage = Stage.ChooseWait; changedAt = now;
         nextActionAt = now + Math.Max(200, timings.NextKey(random)); Result = $"选词 {key}：{text}"; return (char)('0' + key);
     }
-    private char Submit(long now)
+    private char Submit(long now, bool learn = true)
     {
+        if (learn && (characterMode || retainedComposition || inferredWhole) && readings.All(r => r.Length > 0))
+        {
+            var syllables = readings.Select((r, i) => r[readingIndexes[i]]).ToArray();
+            ComposedEntries.Enqueue(new(normalizedWord, syllables, string.Concat(syllables), string.Join("'", syllables)));
+        }
         submitted[targetPath] = normalizedWord;
         CompletedCount++; stage = Stage.AfterSubmit; changedAt = now; nextActionAt = now + Math.Max(250, timings.NextKey(random));
         Result = $"发送：{word}（累计 {CompletedCount} 词）"; return '\n';
@@ -246,6 +268,7 @@ internal sealed class TrialMachine
     private void BeginClear(ClearDestination destination, long now, string reason) { clearDestination = destination; stage = Stage.Clear; nextActionAt = now; Result = reason; }
     private void PrepareUnit(long now)
     {
+        retainedComposition = false; retainedTail = "";
         if (characterMode)
         {
             if (readings[characterIndex].Length == 0)
@@ -258,12 +281,21 @@ internal sealed class TrialMachine
     }
     private KeyValuePair<int,string> FindCandidate(TrialView view)
     {
-        if (characterMode && imeDictionaryInstalled)
+        if (!characterMode)
         {
             var remaining = normalizedWord[characterIndex..];
             var full = view.Candidates.FirstOrDefault(p => WordMatching.Same(p.Value, remaining));
-            if (full.Key is >= 1 and <= 9)
-            { desired = remaining; characterIndex = normalizedWord.Length - 1; return full; }
+            if (full.Key is >= 1 and <= 9) { desired = remaining; return full; }
+            // Do not commit an individual character until the entire spelling has been entered.
+            if (sent < spelling.Length || readings.Any(r => r.Length == 0)) return default;
+            var single = view.Candidates.FirstOrDefault(p => WordMatching.Same(p.Value, normalizedWord[characterIndex].ToString()));
+            if (single.Key is >= 1 and <= 9)
+            {
+                retainedComposition = true;
+                prefix = normalizedWord[..characterIndex]; desired = normalizedWord[characterIndex].ToString();
+                return single;
+            }
+            return default;
         }
         return view.Candidates.FirstOrDefault(p => WordMatching.Same(p.Value, desired));
     }

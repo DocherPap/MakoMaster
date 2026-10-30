@@ -29,33 +29,11 @@ for(long now=0;now<3000 && early.CompletedCount<1;now+=10)
 Check(keys=="j3\n", "skill priority, early candidate, punctuation and disappeared enemy: "+keys);
 Check(!early.Finished && early.CompletedCount==1,"continuous mode must remain armed");
 
-// Whole word: initial page + three PageDown actions, clear, then character search.
-var fallback=new TrialMachine(dictionary,0,new Random(2),true,timing);
-buffer="";keys="";var page=1;var charMode=false;var fullTurns=0;var charTurns=0;var backspaces=0;
-for(long now=0;now<30000 && fallback.CompletedCount<1;now+=10)
-{
-    charMode |= fallback.Result.Contains("逐字");
-    var candidates=new Dictionary<int,string>();
-    if(!charMode)candidates[1]="记步";
-    else if(buffer.StartsWith("计"))candidates[2]="步";
-    else if(page>=2)candidates[4]="计";
-    else candidates[1]="记";
-    var key=fallback.Tick(new(true,buffer,[new("/x/20","计步",0)],candidates,$"page{page}",4),now);
-    if(key==null)continue;
-    keys+=key;
-    if(key is >= 'a' and <= 'z')buffer+=key;
-    else if(key=='\f'){page++;if(charMode)charTurns++;else fullTurns++;}
-    else if(key=='\b'){buffer=buffer[..^1];backspaces++;page=1;}
-    else if(key=='4'){buffer="计";page=1;}
-    else if(key=='2'){buffer="计步";page=1;}
-    else if(key=='\n')buffer="";
-}
-Check(fallback.CompletedCount==1 && fullTurns==3 && charTurns>=1 && backspaces==4,
-    $"paging/clear/character fallback failed: submitted={fallback.CompletedCount}, full={fullTurns}, chars={charTurns}, back={backspaces}, state={fallback.Result}");
+RetainedInputTests.Run();
 
 // A match on the third subsequent page is selected without falling back to characters.
 var thirdPage = new TrialMachine(dictionary,0,new Random(2),true,timing);
-buffer=""; keys=""; page=1; var thirdPageTurns=0;
+buffer=""; keys=""; var page=1; var thirdPageTurns=0;
 for(long now=0;now<15000 && thirdPage.CompletedCount<1;now+=10)
 {
     var candidates=new Dictionary<int,string>{{1,page==4 ? "计步" : "记步"}};
@@ -73,7 +51,7 @@ Check(thirdPage.Fallbacks.Count==0,"third-page match incorrectly recorded fallba
 
 // Unknown whole word: source character readings from other dictionary entries.
 var noWhole=dictionary.Where(p=>p.Key!="计步").ToDictionary();
-var perChar=new TrialMachine(noWhole,0,new Random(3),true,timing);
+var perChar=new TrialMachine(noWhole,0,new Random(3),true,timing,imeDictionaryInstalled:false);
 buffer=""; keys="";
 for(long now=0;now<5000 && perChar.CompletedCount<1;now+=10)
 {
@@ -199,35 +177,34 @@ var strategicBank = new Dictionary<string,DictionaryEntry> { [strategicEntry.Wor
 foreach (var useFallback in new[]{false,true})
 {
     var machine = new TrialMachine(strategicBank,0,new Random(1),true,timing);
-    var typed = ""; var emitted = ""; var fallbackActive = false;
+    var typed = ""; var emitted = "";
     for (long t=0;t<40000 && machine.CompletedCount==0;t+=10)
     {
-        fallbackActive |= machine.Result.Contains("逐字");
         var display = typed.Replace('v','ü');
         if (display.StartsWith("zhanl",StringComparison.Ordinal)) display=display.Insert(4,"'");
         var choices = new Dictionary<int,string>();
         if (!useFallback && typed == "zhanlvejibing") choices[1]="战略机兵";
-        if (fallbackActive)
+        if (useFallback)
         {
-            if (typed=="zhan")choices[1]="战";
-            if (typed=="战lve")choices[2]="略";
-            if (typed=="战略ji")choices[3]="机";
+            if (typed=="zhanlvejibing")choices[1]="战";
+            if (typed=="战lvejibing")choices[2]="略";
+            if (typed=="战略jibing")choices[3]="机";
             if (typed=="战略机bing")choices[4]="兵";
         }
         var k=machine.Tick(new(true,display,[new("/x/20","战略机兵")],choices,"page1",1),t);
         if(k==null)continue;
         emitted+=k;
         if(k is >= 'a' and <= 'z') typed+=k;
-        else if(k=='\b') typed=typed[..^1];
-        else if(k=='1') typed=fallbackActive?"战":"战略机兵";
-        else if(k=='2') typed="战略";
-        else if(k=='3') typed="战略机";
+        else if(k=='1') typed=useFallback?"战lvejibing":"战略机兵";
+        else if(k=='2') typed="战略jibing";
+        else if(k=='3') typed="战略机bing";
         else if(k=='4') typed="战略机兵";
         else if(k=='\n') typed="";
+        else if(k=='\b') throw new Exception("strategic retained composition cleared input");
     }
     Check(machine.CompletedCount==1, $"strategic word failed with IME umlaut; fallback={useFallback}, state={machine.Result}");
-    if(!useFallback)Check(emitted=="zhanlvejibing1\n", "strategic whole word unexpectedly cleared/restarted: "+emitted);
-    else Check(emitted.Count(c=>c=='\f')==2 && machine.ComposedEntries.Count==1,"strategic character fallback failed");
+    Check(emitted==(useFallback?"zhanlvejibing1234\n":"zhanlvejibing1\n"), "strategic retained composition retyped pinyin: "+emitted);
+    if(useFallback)Check(machine.ComposedEntries.Count==1,"strategic retained composition was not queued for learning");
 }
 var barrierResolver = new WordResolver();
 var barrierFrames=barrierResolver.Resolve([new("/shield/20","计步",true,true,9999,0x8074F8A0)],dictionary,new Dictionary<string,string>());

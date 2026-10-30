@@ -21,6 +21,9 @@ internal sealed class VocabularyStore
     private DateTimeOffset romanAt;
     private Pending? pending;
     private bool dirtySeen, dirtyLearned;
+    private bool deferLearning;
+    internal void BeginGameLearning() => deferLearning = true;
+    internal void CompleteGameLearning() { deferLearning = false; Flush(); }
     private static readonly JsonSerializerOptions JsonOptions = new()
     { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     internal IReadOnlyDictionary<string, DictionaryEntry> EffectiveDictionary => effective;
@@ -111,7 +114,7 @@ internal sealed class VocabularyStore
 
     internal void Flush()
     {
-        if (dirtyLearned)
+        if (dirtyLearned && !deferLearning)
         {
             var entries = learned.Values.OrderBy(x => x.Word, StringComparer.Ordinal).ToArray();
             WriteAtomic(dataFolder, "learned-dictionary.json", entries);
