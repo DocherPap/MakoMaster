@@ -29,7 +29,7 @@ for(long now=0;now<3000 && early.CompletedCount<1;now+=10)
 Check(keys=="j3\n", "skill priority, early candidate, punctuation and disappeared enemy: "+keys);
 Check(!early.Finished && early.CompletedCount==1,"continuous mode must remain armed");
 
-// Whole word: initial page + one PageDown, clear, then character search.
+// Whole word: initial page + three PageDown actions, clear, then character search.
 var fallback=new TrialMachine(dictionary,0,new Random(2),true,timing);
 buffer="";keys="";var page=1;var charMode=false;var fullTurns=0;var charTurns=0;var backspaces=0;
 for(long now=0;now<30000 && fallback.CompletedCount<1;now+=10)
@@ -50,8 +50,26 @@ for(long now=0;now<30000 && fallback.CompletedCount<1;now+=10)
     else if(key=='2'){buffer="计步";page=1;}
     else if(key=='\n')buffer="";
 }
-Check(fallback.CompletedCount==1 && fullTurns==1 && charTurns>=1 && backspaces==4,
+Check(fallback.CompletedCount==1 && fullTurns==3 && charTurns>=1 && backspaces==4,
     $"paging/clear/character fallback failed: submitted={fallback.CompletedCount}, full={fullTurns}, chars={charTurns}, back={backspaces}, state={fallback.Result}");
+
+// A match on the third subsequent page is selected without falling back to characters.
+var thirdPage = new TrialMachine(dictionary,0,new Random(2),true,timing);
+buffer=""; keys=""; page=1; var thirdPageTurns=0;
+for(long now=0;now<15000 && thirdPage.CompletedCount<1;now+=10)
+{
+    var candidates=new Dictionary<int,string>{{1,page==4 ? "计步" : "记步"}};
+    var key=thirdPage.Tick(new(true,buffer,[new("/x/20","计步")],candidates,$"page{page}",4),now);
+    if(key==null)continue;
+    keys+=key;
+    if(key is >= 'a' and <= 'z')buffer+=key;
+    else if(key=='\f'){page++;thirdPageTurns++;}
+    else if(key=='1')buffer="计步";
+    else if(key=='\n')buffer="";
+}
+Check(thirdPage.CompletedCount==1 && thirdPageTurns==3 && keys=="jibu\f\f\f1\n",
+    "third subsequent page whole-word selection failed: "+keys);
+Check(thirdPage.Fallbacks.Count==0,"third-page match incorrectly recorded fallback");
 
 // Unknown whole word: source character readings from other dictionary entries.
 var noWhole=dictionary.Where(p=>p.Key!="计步").ToDictionary();
@@ -209,7 +227,7 @@ foreach (var useFallback in new[]{false,true})
     }
     Check(machine.CompletedCount==1, $"strategic word failed with IME umlaut; fallback={useFallback}, state={machine.Result}");
     if(!useFallback)Check(emitted=="zhanlvejibing1\n", "strategic whole word unexpectedly cleared/restarted: "+emitted);
-    else Check(emitted.Count(c=>c=='\f')==1 && machine.ComposedEntries.Count==1,"strategic character fallback failed");
+    else Check(emitted.Count(c=>c=='\f')==2 && machine.ComposedEntries.Count==1,"strategic character fallback failed");
 }
 var barrierResolver = new WordResolver();
 var barrierFrames=barrierResolver.Resolve([new("/shield/20","计步",true,true,9999,0x8074F8A0)],dictionary,new Dictionary<string,string>());
@@ -556,3 +574,5 @@ for(long now=0;now<3000 && withImeList.CompletedCount<1;now+=10)
 }
 Check(withImeList.CompletedCount==1 && installedKeys=="j1\n","default installed setting must preserve early whole-word selection");
 Console.WriteLine("PASS: imported IME vocabulary checkbox defaults to existing behavior; unchecked starts each word in strict character mode without whole-word retries.");
+
+CastPriorityAuditTests.Run();

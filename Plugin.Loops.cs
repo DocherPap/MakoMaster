@@ -282,12 +282,64 @@ public sealed partial class Plugin
         {
             var slot = WordMatching.Slot(row.Path);
             if (WordMatching.KnownInterruptibleSkill(row.Text)) { kinds[slot] = true; continue; }
+            // The bar style is available from cast start; countdown markers can still be hidden.
+            var background = casting!.Visuals?.FirstOrDefault(v => v.NodeId == 8 && WordMatching.Slot(v.Path) == slot);
             // Other skills use the current countdown/interrupt marker.
             var marker = casting!.Visuals?.FirstOrDefault(v => v.NodeId == 7 && WordMatching.Slot(v.Path) == slot);
             var countdown = casting.Nodes.FirstOrDefault(n => n.NodeId == 5 && WordMatching.Slot(n.Path) == slot);
-            if (marker != null || countdown != null) kinds[slot] = marker?.Visible == true || countdown?.Visible == true;
+            var flag = CastStyleRules.Interruptible(background?.PartId, marker?.Visible, countdown?.Visible);
+            if (flag != null) kinds[slot] = flag.Value;
         }
         return kinds;
+    }
+
+    private string lastCastWordLinks = "";
+    private Dictionary<string, string> MapCastWords(AddonSnapshot words, AddonSnapshot? casting, out Dictionary<string, bool> interruptibleByWord)
+    {
+        static IEnumerable<EnemyUiAnchor> Anchors(AddonSnapshot? addon) => addon?.Visuals?
+            .Where(v => v.Visible && v.Path.Count(c => c == '/') == 1 && int.TryParse(v.Type, out var type) && type >= 1000)
+            .Select(v => new EnemyUiAnchor(v.Path, v.X, v.Y, v.Width, v.Height, v.ScaleX, v.ScaleY)) ?? [];
+        var skills = new Dictionary<string, string>();
+        interruptibleByWord = new();
+        var kinds = ReadCastKinds(casting);
+        var active = casting?.Nodes.Where(n => n.Visible && n.NodeId == 4 && n.Text.Length > 0)
+            .ToDictionary(n => WordMatching.Slot(n.Path), n => n.Text) ?? new();
+        var links = CastTargetMatcher.Match(Anchors(words), Anchors(casting).Where(a => active.ContainsKey(a.Slot)));
+        foreach (var link in links)
+        {
+            if (!active.TryGetValue(link.CastSlot, out var skill)) continue;
+            skills[link.WordSlot] = skill;
+            if (kinds.TryGetValue(link.CastSlot, out var flag)) interruptibleByWord[link.WordSlot] = flag;
+        }
+        var diagnostics = active.Select(c =>
+        {
+            var link = links.FirstOrDefault(l => l.CastSlot == c.Key);
+            var word = link == null ? null : words.Nodes.FirstOrDefault(n => n.NodeId == 20 && WordMatching.Slot(n.Path) == link.WordSlot)?.Text;
+            return new { CastSlot = c.Key, Skill = c.Value, WordSlot = link?.WordSlot, Word = word, Error = link?.Error,
+                Interruptible = kinds.TryGetValue(c.Key, out var flag) ? (bool?)flag : null };
+        }).ToArray();
+        var signature = JsonSerializer.Serialize(diagnostics);
+        if (signature != lastCastWordLinks)
+        {
+            lastCastWordLinks = signature;
+            WriteRecord(new { Kind = "CastWordLinks", At = DateTimeOffset.Now, Links = diagnostics });
+        }
+        return skills;
+    }
+    private static unsafe List<VisualRow> ReadWordAnchors(AtkUnitBase* addon)
+    {
+        var result = new List<VisualRow>();
+        var manager = &addon->UldManager;
+        if (manager->NodeList == null) return result;
+        for (int i = 0; i < Math.Min((int)manager->NodeListCount, 4096); i++)
+        {
+            var node = manager->NodeList[i];
+            if (node == null || (int)node->Type < 1000) continue;
+            result.Add(new($"/{node->NodeId}[{i}]", node->NodeId, node->Type.ToString(), node->IsVisible(), node->Color.RGBA,
+                node->MultiplyRed, node->MultiplyGreen, node->MultiplyBlue, node->ScreenX, node->ScreenY,
+                node->Width, node->Height, node->ScaleX, node->ScaleY, null, null, null, null, []));
+        }
+        return result;
     }
 
     private sealed record VisualRow(string Path, uint NodeId, string Type, bool Visible, uint Color,

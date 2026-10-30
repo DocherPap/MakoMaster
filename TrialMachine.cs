@@ -27,6 +27,7 @@ internal sealed class TrialMachine
     private string[][] readings = [];
     private int[] readingIndexes = [];
     private readonly HashSet<string> visitedPages = new();
+    private const int WholeWordPageTurns = 3;
     private ClearDestination clearDestination;
     internal int CompletedCount { get; private set; } // submissions, not verified kills
     internal bool HasEnteredGame { get; private set; }
@@ -34,6 +35,22 @@ internal sealed class TrialMachine
     internal bool Finished => stage == Stage.Done;
     internal string Result { get; private set; } = "等待小游戏与题目";
     internal string Target => word;
+    internal string TargetPath => targetPath;
+    internal string Phase => stage.ToString();
+    internal string TargetEligibility(TrialWord target, long now)
+    {
+        var key = WordMatching.Normalize(target.Text);
+        if (submitted.TryGetValue(target.Path, out var sentWord) && sentWord == key) return "已发送，不重试";
+        if (skipUntil.TryGetValue(key, out var until) && until > now) return "暂缓：缺少读音或候选未找到";
+        return "可选";
+    }
+    private void RecordMissingReading(string text, string[][] options, long now)
+    {
+        var key = WordMatching.Normalize(text);
+        var missing = string.Concat(key.Where((c, i) => i >= options.Length || options[i].Length == 0).Distinct());
+        skipUntil[key] = now + 15000;
+        Fallbacks.Enqueue((key, "", "缺少读音，无法输入：" + missing));
+    }
     internal void ExtendWait(long milliseconds) { nextActionAt += milliseconds; changedAt += milliseconds; nextKeyAllowedAt += milliseconds; }
     internal Queue<(string Word, string Pinyin, string Reason)> Fallbacks { get; } = new();
     internal Queue<DictionaryEntry> ComposedEntries { get; } = new();
@@ -79,7 +96,7 @@ internal sealed class TrialMachine
                 if (skipUntil.TryGetValue(key, out var until) && until > now) continue;
                 var entry = FindEntry(urgent.Text);
                 var options = ReadingsFor(urgent.Text, entry);
-                if (options.Length == 0 || options.Any(r => r.Length == 0)) continue;
+                if (options.Length == 0 || options.Any(r => r.Length == 0)) { RecordMissingReading(urgent.Text, options, now); continue; }
                 BeginClear(ClearDestination.Priority, now, "更高优先级目标：" + urgent.Text + "，清空后优先处理");
                 break;
             }
@@ -99,7 +116,8 @@ internal sealed class TrialMachine
                     if (skipUntil.TryGetValue(key, out var until) && until > now) continue;
                     entry = FindEntry(target.Text);
                     var options = ReadingsFor(target.Text, entry);
-                    if (options.Length == 0 || ((entry == null || !imeDictionaryInstalled) && options.Any(x => x.Length == 0))) continue;
+                    if (options.Length == 0 || ((entry == null || !imeDictionaryInstalled) && options.Any(x => x.Length == 0)))
+                    { RecordMissingReading(target.Text, options, now); continue; }
                     selected = target; readings = options; break;
                 }
                 if (selected == null) { Result = "等待新题目（已发送题目不重试，缺词已记录）"; return null; }
@@ -137,13 +155,13 @@ internal sealed class TrialMachine
         {
             var candidate = FindCandidate(view);
             if (candidate.Key is >= 1 and <= 9) return Choose(candidate.Key, candidate.Value, now);
-            var maxTurns = characterMode ? Math.Clamp(view.TotalPages > 0 ? view.TotalPages : 64, 1, 256) : 1;
+            var maxTurns = characterMode ? Math.Clamp(view.TotalPages > 0 ? view.TotalPages : 64, 1, 256) : WholeWordPageTurns;
             if (turns >= maxTurns || unchangedPages >= 2)
             {
                 if (!characterMode)
                 {
-                    Fallbacks.Enqueue((normalizedWord, spelling, "首页及下一页均无整词候选"));
-                    BeginClear(ClearDestination.Characters, now, "整词下一页仍未找到，已记录，清空后逐字输入");
+                    Fallbacks.Enqueue((normalizedWord, spelling, "首页及后续三页均无整词候选"));
+                    BeginClear(ClearDestination.Characters, now, "整词翻页后仍未找到，已记录，清空后逐字输入");
                 }
                 else NextReadingOrSkip(now);
                 return null;
@@ -152,7 +170,7 @@ internal sealed class TrialMachine
             if (!visitedPages.Add(pageBefore) && characterMode && turns > 0) { NextReadingOrSkip(now); return null; }
             turns++; stage = Stage.PageWait; changedAt = now;
             nextActionAt = now + Math.Max(150, timings.NextKey(random));
-            Result = characterMode ? $"逐字查找 {desired}，翻页 {turns}" : $"整词候选翻页 {turns}/1";
+            Result = characterMode ? $"逐字查找 {desired}，翻页 {turns}" : $"整词候选翻页 {turns}/{WholeWordPageTurns}";
             return '\f';
         }
         if (stage == Stage.PageWait)

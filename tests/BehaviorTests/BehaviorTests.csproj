@@ -3,6 +3,7 @@
  <ItemGroup>
   <Compile Include="../../NativeInput.cs" Link="NativeInput.cs" />
   <Compile Include="../../DependencyRules.cs" Link="DependencyRules.cs" />
+  <Compile Include="../../CastTargetMatcher.cs" Link="CastTargetMatcher.cs" />
   <Compile Include="../../WorldAutomation.cs" Link="WorldAutomation.cs" />
   <Compile Include="../../ChestOpeningSession.cs" Link="ChestOpeningSession.cs" />
   <Compile Include="../../InputLanguageGuard.cs" Link="InputLanguageGuard.cs" />
@@ -14,5 +15,5 @@
   <Compile Include="../../RoundLoop.cs" Link="RoundLoop.cs" />
   <Compile Include="../../SkillPauseGate.cs" Link="SkillPauseGate.cs" />
  </ItemGroup>
- <ItemGroup><None Update="cast-progress.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+ <ItemGroup><None Include="../../dictionary.json" Link="dictionary.json" CopyToOutputDirectory="PreserveNewest" /><None Update="cast-progress.json" CopyToOutputDirectory="PreserveNewest" /><None Update="cast-word-layout.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

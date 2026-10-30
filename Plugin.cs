@@ -258,7 +258,7 @@ public sealed partial class Plugin : IDalamudPlugin
             lastTrialState = "";
             lastWaitPhase = "";
             lastRunResult = "已启动";
-            wordResolver.Reset();
+            wordResolver.Reset(); lastCastWordLinks = "";
             skillPause.Reset(); skillPaused = false; lastSkillPauseTick = 0;
             showControlWindow = true;
             WriteRecord(new { Kind = "InputMode", At = DateTimeOffset.Now, Continuous = continuousMode,
@@ -495,7 +495,7 @@ public sealed partial class Plugin : IDalamudPlugin
             if (Encoding.UTF8.GetString(end < 0 ? bytes : bytes[..end]) != name) continue;
             var rows = new List<TextRow>();
             Walk(&addon->UldManager, "", true, 0, new HashSet<nint>(), rows);
-            return new(name, addon->Id, rows, ReadValues(addon), name == "KTGEnemyCastBar" ? ReadVisuals(addon, name) : null);
+            return new(name, addon->Id, rows, ReadValues(addon), name == "KTGEnemyCastBar" ? ReadVisuals(addon, name) : name == "KTGEWord" ? ReadWordAnchors(addon) : null);
         }
         return null;
     }
@@ -545,13 +545,11 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         if (!NativeInput.TryGetClientSize(out var clientWidth, out var clientHeight))
         { PauseInput("等待游戏窗口恢复", now); return; }
-        var skills = new Dictionary<string,string>();
-        foreach (var row in casting?.Nodes.Where(n => n.Visible && n.NodeId == 4 && n.Text.Length > 0) ?? [])
-            skills[WordMatching.Slot(row.Path)] = row.Text;
+        var skills = MapCastWords(words, casting, out var interruptibleByWord);
         var observations = words.Nodes.Where(n => n.NodeId == 20)
             .Select(n => new WordObservation(n.Path, n.Text, n.Visible, n.ContainerVisible,
                 WordPriority.SafeDistance(Math.Pow(n.ScreenX - clientWidth * 0.5, 2) + Math.Pow(n.ScreenY - clientHeight, 2)), n.TextColor));
-        var targets = wordResolver.Resolve(observations, vocabulary?.EffectiveDictionary ?? new Dictionary<string,DictionaryEntry>(), skills, interruptibleSkills, ReadCastKinds(casting));
+        var targets = wordResolver.Resolve(observations, vocabulary?.EffectiveDictionary ?? new Dictionary<string,DictionaryEntry>(), skills, interruptibleSkills, interruptibleByWord);
         var page = input!.Nodes.FirstOrDefault(n => n.Path == "/7[4]/14[7]" && n.Visible)?.Text ?? "";
         var pageMatch = System.Text.RegularExpressions.Regex.Match(page, @"\((\d+)/(\d+)\)");
         var totalPages = pageMatch.Success ? int.Parse(pageMatch.Groups[2].Value) : 0;
@@ -602,7 +600,8 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             lastTrialState = trial.Result;
             if (!WriteRecord(new { Kind = "Trial", At = DateTimeOffset.Now, State = trial.Result,
-                Target = trial.Target, CompletedCount = trial.CompletedCount,
+                Target = trial.Target, TargetPath = trial.TargetPath, Phase = trial.Phase, CompletedCount = trial.CompletedCount,
+                PriorityTargets = targets.Where(w => w.Priority > 0).Select(w => new { w.Path, w.Text, w.Priority, w.Skill, Eligibility = trial.TargetEligibility(w, now) }).ToArray(),
                 InputTextVisible = bufferNode?.Visible,
                 NativeInputFlag = input?.Values.FirstOrDefault(v => v.Index == 2)?.Text,
                 Anchor = new { X = clientWidth * 0.5, Y = clientHeight },
