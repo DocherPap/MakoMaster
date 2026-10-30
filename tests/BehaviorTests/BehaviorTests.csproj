@@ -12,6 +12,7 @@
   <Compile Include="../../TimingSettings.cs" Link="TimingSettings.cs" />
   <Compile Include="../../CaptureSession.cs" Link="CaptureSession.cs" />
   <Compile Include="../../VocabularyStore.cs" Link="VocabularyStore.cs" />
+  <Compile Include="../../AutoEntrySession.cs" Link="AutoEntrySession.cs" />
   <Compile Include="../../RoundLoop.cs" Link="RoundLoop.cs" />
   <Compile Include="../../SkillPauseGate.cs" Link="SkillPauseGate.cs" />
  </ItemGroup>

@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $version = $identity.Version.ToString()
 $zipName = "MakoMaster-$version.zip"
 $zip = Join-Path $dist $zipName
-$files = @($dll, $manifestFile) + @('dictionary.json', 'interruptible-skills.json', 'README.md', 'README.en.md' | ForEach-Object { Join-Path $projectRoot $_ })
+$files = @($dll, $manifestFile) + @('dictionary.json', 'learned-dictionary.json', 'interruptible-skills.json', 'README.md', 'README.en.md' | ForEach-Object { Join-Path $projectRoot $_ })
 Compress-Archive -LiteralPath $files -DestinationPath $zip -Force
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $dist "$zipName.sha256"), "$hash  $zipName`n", [Text.UTF8Encoding]::new($false))

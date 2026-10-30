@@ -15,7 +15,7 @@ https://raw.githubusercontent.com/DocherPap/MakoMaster/main/repo.json
 ## Getting started
 
 1. Enter `/makomaster` to open the window.
-2. Select a mode, enter a game count or chest quantity, and click **Start (开始)**.
+2. For automatic registration, select a mode, enter a game count or chest quantity, and click **Start (开始)**. By default, entering the minigame manually also starts typing automatically, stopping at that game’s results screen.
 3. **Stop (停止)** ends the current operation, including typing, travel, navigation, and exchange.
 
 | Mode | Behavior | Initial preset |
@@ -67,9 +67,16 @@ Stop before editing key and word delays, or select a preset:
 
 Changes apply when starting. Click **Save settings (保存设置)** to save the timing values; the message beside the button shows the apply/save status. Diga still waits for IME responses and retains dangerous-skill pauses.
 
-- **IME vocabulary installed (输入法已安装词库)** appears before Chat output and is checked by default. Leave it checked if you have imported the word list into your IME: the plugin types whole words or phrases and selects a matching candidate as soon as it appears. Otherwise, uncheck it to start every prompt in character-by-character mode. Stop before changing it; hover for an explanation. This is a manual setting, not automatic detection of installed IME vocabulary.
+- **Start on entry (进本时自动启动)** is the first Advanced setting, enabled by default and saved immediately. When no other operation is running, entering the minigame starts typing for that game only. It stops at results and does not register for another game. A manual stop prevents restarting during the same game. Manually started modes still follow their configured game counts.
+- **IME vocabulary installed (输入法已安装词库)** appears before Chat output and is checked by default. Leave it checked if you have imported the word list into your IME: the plugin types whole words or phrases and selects a matching candidate as soon as it appears. If absent from the current page, it turns forward up to three times before falling back to character-by-character input. Otherwise, uncheck it to start every prompt in character-by-character mode. Stop before changing it; hover for an explanation. This is a manual setting, not automatic detection of installed IME vocabulary.
 - **Chat output (聊天框输出)** is enabled by default. Uncheck it to silence plugin chat messages, including errors.
-- **Save logs (保存日志)** is off by default and resets to off on reload. Check it to save logs and newly learned vocabulary. With saving off, new entries remain available only for the current plugin session. Enable it before reproducing an issue if you need diagnostic logs.
+- **Save logs (保存日志)** is off by default and resets to off on reload. Check it to save diagnostic logs. Learned words are saved automatically regardless of this setting. Enable it before reproducing an issue if you need diagnostic logs.
+
+## Learned vocabulary
+
+Completed character-by-character input teaches the plugin the word and its pronunciation automatically, even with Save logs off. Learned entries live in a stable plugin configuration directory. On update, entries are merged from that directory, the current installation, and any older installed versions still present.
+
+A cumulative **`learned-dictionary.json`** is also saved beside the DLL, containing only words and pronunciation. Commit this file to your repository to share it. The plugin does not upload anything or import words into the system IME. Update packages include the repository’s learned words and merge them with local entries without duplicates.
 
 ## While running
 

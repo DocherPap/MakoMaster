@@ -2,7 +2,6 @@
 captures/
 **/captures/
 seen-words.json
-learned-dictionary.json
 fallback-words.json
 timing-settings.json
 *.tmp

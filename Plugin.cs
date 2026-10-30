@@ -12,7 +12,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace MakoMaster;
 
 // Native UI pointers stay on the framework thread and are never retained.
-// Input is disabled unless the user explicitly arms auto or the one-question test.
+// Entry automation is limited to the detected minigame; manual loops keep their existing ownership.
 public sealed partial class Plugin : IDalamudPlugin
 {
     private readonly IDalamudPluginInterface pi;
@@ -66,8 +66,14 @@ public sealed partial class Plugin : IDalamudPlugin
             wordMinMs = timingSettings.WordMinMs; wordMaxMs = timingSettings.WordMaxMs;
         }
         catch (Exception ex) { timingMessage = "读取设置失败，暂用默认值。"; log.Error(ex, "MakoMaster timing settings load failed"); }
-        try { vocabulary = new VocabularyStore(pi.AssemblyLocation.DirectoryName!); }
+        try
+        {
+            var installedFolder = pi.AssemblyLocation.DirectoryName!;
+            vocabulary = new VocabularyStore(installedFolder, pi.GetPluginConfigDirectory(), LegacyVocabularyFolders(installedFolder));
+        }
         catch (Exception ex) { log.Error(ex, "MakoMaster vocabulary load failed; existing files preserved"); }
+        try { autoStartOnEntry = AutoEntrySettings.Load(AutoEntryFile).Enabled; }
+        catch (Exception ex) { log.Error(ex, "MakoMaster auto-entry settings load failed"); }
         SelectRunMode(RunMode.Solo);
         commands.AddHandler("/makomaster", new CommandInfo(OnCommand)
         {
@@ -131,6 +137,12 @@ public sealed partial class Plugin : IDalamudPlugin
             }
             if (advancedOpen)
             {
+                if (ImGui.Checkbox("进本时自动启动", ref autoStartOnEntry))
+                {
+                    try { new AutoEntrySettings(autoStartOnEntry).Save(AutoEntryFile); }
+                    catch (Exception ex) { log.Error(ex, "MakoMaster auto-entry settings save failed"); PrintChatError("[MakoMaster] 自动启动设置保存失败。"); }
+                }
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("未手动启动时，进入魔光键影自动输入，本局结算时停止；手动停止后本局不再自动启动。");
                 DrawAutoRedeemSettings();
                 ImGui.BeginDisabled(trial != null);
                 ImGui.TextUnformatted("按键随机间隔（毫秒）");
@@ -361,6 +373,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateVocabulary(Environment.TickCount64);
         try
         {
+            UpdateAutoEntry(Environment.TickCount64);
             UpdateChestOpening(Environment.TickCount64);
             keyboard.ReleaseDue(Environment.TickCount64);
             UpdateWorldAutomation(Environment.TickCount64);
@@ -615,6 +628,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void StopTrial(string reason)
     {
+        autoEntrySession.SuppressCurrentGame();
         if (trial == null && !keyboard.Holding) return;
         ResetInputEnvironment();
         var target = trial?.Target;

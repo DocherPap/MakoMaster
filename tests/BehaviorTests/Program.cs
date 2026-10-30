@@ -291,21 +291,7 @@ Check(capturedGate.Tick([],lastCapturedMs+100),"recorded cast end missing guard"
 Check(!capturedGate.Tick([],lastCapturedMs+2601),"recorded cast guard did not expire");
 Console.WriteLine("PASS: anonymized actual native cast-fill samples pause near cast completion, not its beginning.");
 
-// Default startup and in-memory learning must not create any directories or files.
-var disabledFolder=Path.Combine(AppContext.BaseDirectory,"test-data","no-save-"+Guid.NewGuid().ToString("N"));
-var memoryOnly=new VocabularyStore(disabledFolder);
-Check(!memoryOnly.PersistenceEnabled && !Directory.Exists(disabledFolder),"default store created a runtime directory");
-memoryOnly.RecordFallback("计步","jibu","内存记录");
-memoryOnly.LearnComposition(new("计步",["ji","bu"],"jibu","ji'bu"));
-memoryOnly.Observe(new(true,"",[new("/memory/20","近")],new Dictionary<int,string>()),DateTimeOffset.UtcNow);
-memoryOnly.Flush();
-Check(memoryOnly.EffectiveDictionary.ContainsKey("计步") && !Directory.Exists(disabledFolder),"disabled saving broke memory learning or wrote files");
-memoryOnly.PersistenceEnabled=true;memoryOnly.Flush();
-Check(File.Exists(Path.Combine(disabledFolder,"learned-dictionary.json")) && File.Exists(Path.Combine(disabledFolder,"fallback-words.json")),"explicit enabling did not persist pending records");
-var savedContents=File.ReadAllText(Path.Combine(disabledFolder,"fallback-words.json"));
-memoryOnly.PersistenceEnabled=false;memoryOnly.RecordFallback("近","jin","关闭后内存记录");memoryOnly.Flush();
-Check(File.ReadAllText(Path.Combine(disabledFolder,"fallback-words.json"))==savedContents,"turning saving off still changed a file");
-Console.WriteLine("PASS: files/directories are absent by default; learning stays in memory; opt-in persists; opt-out stops writes.");
+RuntimeLearningTests.Run();
 
 PriorityTimingTests.Run();
 

@@ -10,6 +10,7 @@ internal sealed record FallbackWord(string Word, string Pinyin, string Reason, D
 internal sealed class VocabularyStore
 {
     private readonly string folder;
+    private readonly string dataFolder;
     private readonly Dictionary<string, DictionaryEntry> effective = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DictionaryEntry> learned = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SeenWord> seen = new(StringComparer.Ordinal);
@@ -27,22 +28,32 @@ internal sealed class VocabularyStore
     internal int LearnedCount => learned.Count;
     internal bool PersistenceEnabled { get; set; }
 
-    internal VocabularyStore(string folder)
+    // The installed folder contains distributable words; the stable folder survives version updates.
+    // Only diagnostic records are controlled by PersistenceEnabled. Learned words always persist.
+    internal VocabularyStore(string folder, string? persistenceFolder = null, IEnumerable<string>? legacyFolders = null)
     {
         this.folder = folder;
-        foreach (var entry in Read<DictionaryEntry>("dictionary.json")) effective.TryAdd(entry.Word, entry);
-        foreach (var entry in Read<DictionaryEntry>("learned-dictionary.json"))
-        {
-            if (!ValidEntry(entry)) throw new InvalidDataException("学习词库含无效词条，未覆盖原文件。");
-            learned.TryAdd(entry.Word, entry); effective.TryAdd(entry.Word, entry);
-        }
-        foreach (var item in Read<SeenWord>("seen-words.json")) seen.TryAdd(item.Word, item);
-        foreach (var item in Read<FallbackWord>("fallback-words.json")) fallbacks.TryAdd(item.Word, item);
-        dirtyLearned = !File.Exists(Path.Combine(folder, "learned-dictionary.json"));
+        dataFolder = persistenceFolder ?? folder;
+        foreach (var entry in Read<DictionaryEntry>(folder, "dictionary.json")) effective.TryAdd(entry.Word, entry);
+        var sources = new[] { dataFolder }.Concat(legacyFolders ?? []).Append(folder)
+            .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+            foreach (var entry in Read<DictionaryEntry>(source, "learned-dictionary.json"))
+            {
+                if (!ValidEntry(entry)) throw new InvalidDataException("学习词库含无效词条，未覆盖原文件。");
+                var normalized = WordMatching.Normalize(entry.Word);
+                if (learned.Keys.Any(w => WordMatching.Same(w, normalized))) continue;
+                var normalizedEntry = entry with { Word = normalized };
+                learned.TryAdd(normalized, normalizedEntry); effective.TryAdd(normalized, normalizedEntry);
+            }
+        foreach (var item in Read<SeenWord>(dataFolder, "seen-words.json")) seen.TryAdd(item.Word, item);
+        foreach (var item in Read<FallbackWord>(dataFolder, "fallback-words.json")) fallbacks.TryAdd(item.Word, item);
+        dirtyLearned = learned.Count > 0;
+        Flush(); // Migrate and merge before a new plugin version can replace its installation folder.
     }
-    private T[] Read<T>(string name)
+    private static T[] Read<T>(string directory, string name)
     {
-        var path = Path.Combine(folder, name);
+        var path = Path.Combine(directory, name);
         return File.Exists(path) ? JsonSerializer.Deserialize<T[]>(File.ReadAllText(path))
             ?? throw new InvalidDataException(name + " 内容无效") : [];
     }
@@ -75,7 +86,7 @@ internal sealed class VocabularyStore
                     var pinyin = string.Concat(parts);
                     var entry = new DictionaryEntry(pending.Word, parts, pinyin, pending.Roman);
                     if (ValidEntry(entry))
-                    { learned[entry.Word] = entry; effective[entry.Word] = entry; dirtyLearned = true; }
+                    { learned[entry.Word] = entry; effective[entry.Word] = entry; dirtyLearned = true; Flush(); }
                 }
                 pending = null;
             }
@@ -100,14 +111,19 @@ internal sealed class VocabularyStore
 
     internal void Flush()
     {
-        if (!PersistenceEnabled) return;
-        Directory.CreateDirectory(folder);
-        if (dirtyFallbacks)
-        { WriteAtomic("fallback-words.json", fallbacks.Values.OrderBy(x => x.Word).ToArray()); dirtyFallbacks = false; }
-        if (dirtySeen)
-        { WriteAtomic("seen-words.json", seen.Values.OrderBy(x => x.Word, StringComparer.Ordinal).ToArray()); dirtySeen = false; }
         if (dirtyLearned)
-        { WriteAtomic("learned-dictionary.json", learned.Values.OrderBy(x => x.Word, StringComparer.Ordinal).ToArray()); dirtyLearned = false; }
+        {
+            var entries = learned.Values.OrderBy(x => x.Word, StringComparer.Ordinal).ToArray();
+            WriteAtomic(dataFolder, "learned-dictionary.json", entries);
+            if (!Path.GetFullPath(folder).Equals(Path.GetFullPath(dataFolder), StringComparison.OrdinalIgnoreCase))
+                WriteAtomic(folder, "learned-dictionary.json", entries);
+            dirtyLearned = false;
+        }
+        if (!PersistenceEnabled) return;
+        if (dirtyFallbacks)
+        { WriteAtomic(dataFolder, "fallback-words.json", fallbacks.Values.OrderBy(x => x.Word).ToArray()); dirtyFallbacks = false; }
+        if (dirtySeen)
+        { WriteAtomic(dataFolder, "seen-words.json", seen.Values.OrderBy(x => x.Word, StringComparer.Ordinal).ToArray()); dirtySeen = false; }
     }
     internal void RecordFallback(string word, string pinyin, string reason)
     {
@@ -123,9 +139,10 @@ internal sealed class VocabularyStore
         learned[entry.Word] = entry; effective[entry.Word] = entry; dirtyLearned = true;
         Flush();
     }
-    private void WriteAtomic<T>(string name, T data)
+    private static void WriteAtomic<T>(string directory, string name, T data)
     {
-        var path = Path.Combine(folder, name);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, name);
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(data, JsonOptions), new UTF8Encoding(false));
         File.Move(temporary, path, overwrite: true);
